@@ -1,20 +1,10 @@
-from enum import Enum, auto
 import math
-from typing import Any, Callable, Final, Optional
+from typing import Any, Callable, Final
 import warnings
 
 from torch.optim.lr_scheduler import LRScheduler
 
-
-class WarmUpRoutine(Enum):
-    LINEAR = auto()
-    LOGARITHMIC = auto()
-    EXPONENTIAL = auto()
-    SIN = auto()
-    
-class WarmUpMetric(Enum):
-    GLOBAL_STEP = auto()
-    TOKENS = auto()   
+from diffccoder.configs.enums import WarmUpMetric, WarmUpRoutine
 
 
 LIMIT_K: Final[int] = 10

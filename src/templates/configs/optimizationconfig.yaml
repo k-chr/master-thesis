@@ -1,7 +1,5 @@
 !OptimizationConfig
-    adam_betas: !!python/tuple
-        - 0.9
-        - 0.999
+    adam_betas: !tuple [0.9, 0.999]
     adam_eps: 1.0e-08
     adam_fused: false
     cos_eta_min: null
@@ -13,8 +11,18 @@
     lr_base: 0.01
     lr_decay_rate: 0.985
     lr_decay_step_size: 500
-    lr_scheduler: cosine
-    optimizer: adam
+    lr_scheduler: !LRSchedulerType
+        value: cosine
+    optimizer: !OptimizerType
+        value: adam
     sgd_momentum: 0.95
-    warmup_tokens: 5000
+    warmup_k: 2.718281828459045
+    warmup_lr_0: 0.0
+    warmup_max: 5000
+    warmup_metric: !WarmUpMetric
+        value: global_step
+    warmup_routine: !WarmUpRoutine
+        value: sin
+    warmup_scheduler: !LRSchedulerType
+        value: cosine
     weight_decay: 0.9985
