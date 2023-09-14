@@ -1,0 +1,13 @@
+!TokenizerConfig
+    add_prefix_space: false
+    continuing_subword_prefix: null
+    dropout: null
+    end_of_word_suffix: null
+    lowercase: false
+    merges: null
+    min_frequency: 2
+    special_tokens: []
+    trim_offsets: false
+    unicode_normalizer: null
+    vocab: null
+    vocab_size: 50277
