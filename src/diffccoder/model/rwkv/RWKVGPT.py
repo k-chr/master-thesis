@@ -1,4 +1,4 @@
-import loguru
+from loguru import logger
 import torch as t
 from torch import nn
 from torch.functional import F
@@ -36,7 +36,7 @@ class RWKV(nn.Module):
 
 
 class GPT(nn.Module):
-    def __init__(self, config: RWKVConfig, logger: 'loguru.Logger'):
+    def __init__(self, config: RWKVConfig):
         super().__init__()
         self.rwkv = RWKV(config)
         self.head = nn.Linear(config.embedding_size, config.vocab_size, bias=False)
@@ -72,6 +72,7 @@ class GPT(nn.Module):
         
         rwkv_out: RWKVOutput = self.rwkv(idx)
         x = rwkv_out.last_hidden_state
+        
         if self.config.qk_attention > 0:
             q: t.Tensor = self.head_q(x)[:, :T, :]
             k: t.Tensor = self.head_k(x)[:, :T, :]

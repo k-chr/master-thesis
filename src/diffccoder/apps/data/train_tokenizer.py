@@ -1,11 +1,11 @@
-''' train_tokenizer.py - Extracts and concatenates text from xmls (National Corpus of Polish)
+''' train_tokenizer.py - Trains ByteLevel-BPE tokenizer on provided raw txt data.
 Usage:
     train_tokenizer.py [options] <in_dir> <out_file> <list_dir.txt> <tokenizer.yaml>
     train_tokenizer.py (-h | --help)
     train_tokenizer.py (-v | --version)
     
 Arguments:
-    <in_dir>                Path to directory with xmls.
+    <in_dir>                Path to directory with txts.
     <out_file>              Path to output json file.
     <list_dir.txt>          Path to file that contains directory names list to process.
     <tokenizer.yaml>        Path to tokenizer config.

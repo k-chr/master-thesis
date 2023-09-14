@@ -1,4 +1,4 @@
-''' process_small_xml.py - Extracts and concatenates text from xmls (National Corpus of Polish)
+''' process_small_xml.py - Extracts and concatenates text from xmls (generally speaking this script was made for National Corpus of Polish)
 Usage:
     process_small_xml.py [options] <in_dir> <out_dir> <list_dir.txt>
     process_small_xml.py (-h | --help)

@@ -5,12 +5,14 @@ from torch.functional import F
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler, StepLR
 
+from diffccoder.configs.enums import LRSchedulerType, OptimizerType
 from diffccoder.configs.optimization_config import OptimizationConfig
 from diffccoder.configs.rwkv_config import RWKVConfig
 from diffccoder.model.rwkv.RWKVGPT import GPT
 from diffccoder.model.rwkv.outputs import RWKVOutput
 from diffccoder.utils.l2wrap import L2Wrap
 from diffccoder.utils.lr_scheduler import EhnancedCosineSchedulerLR
+from diffccoder.utils.warm_up_scheduler import WarmUpScheduler
 
 
 class PretrainingModule(LightningModule):
@@ -33,27 +35,29 @@ class PretrainingModule(LightningModule):
         optimizer: t.optim.Optimizer = None
         
         match self.config.optimizer:
-            case 'adam':
+            case OptimizerType.ADAM:
                 optimizer = t.optim.Adam(params=optim_groups,
                                          lr=self.config.lr_base,
                                          eps=self.config.adam_eps,
                                          betas=self.config.adam_betas,
                                          fused=self.config.adam_fused)
-            case 'sgd':
+            case OptimizerType.SGD:
                 optimizer = t.optim.SGD(params=optim_groups,
                                         lr=self.config.lr_base,
                                         momentum=self.config.sgd_momentum)          
             case _:
                 raise RuntimeError(f'Not implemented optimizer: {self.config.optimizer}')
-        
-          
+            
+        scheduler_aux_config = {}
         
         match self.config.lr_scheduler:
-            case 'step':
+            case LRSchedulerType.STEP:
                 scheduler = StepLR(optimizer=optimizer, 
                                    step_size=self.config.lr_decay_step_size,
                                    gamma=self.config.lr_decay_rate)
-            case 'cosine':
+                
+                scheduler_aux_config = {'name': 'step'}
+            case LRSchedulerType.COSINE:
                 scheduler = EhnancedCosineSchedulerLR(optimizer=optimizer,
                                                       t_0=self.config.cos_t0,
                                                       eta_min=self.config.cos_eta_min,
@@ -61,18 +65,51 @@ class PretrainingModule(LightningModule):
                                                       t_decay=self.config.cos_t_decay,
                                                       lr_lowest_bound_ratio=self.config.cos_lb_ratio,
                                                       warm_restarts=self.config.cos_warm_restarts)
+                
+                scheduler_aux_config = {'name': 'cosine'}
+            case LRSchedulerType.WARMUP:
+                
+                match self.config.warmup_scheduler:
+                    case LRSchedulerType.STEP:
+                        to_wrap = StepLR(optimizer=optimizer, 
+                                         step_size=self.config.lr_decay_step_size,
+                                         gamma=self.config.lr_decay_rate)
+                    case LRSchedulerType.COSINE:
+                        to_wrap = EhnancedCosineSchedulerLR(optimizer=optimizer,
+                                                            t_0=self.config.cos_t0,
+                                                            eta_min=self.config.cos_eta_min,
+                                                            lr_decay=self.config.lr_decay_rate,
+                                                            t_decay=self.config.cos_t_decay,
+                                                            lr_lowest_bound_ratio=self.config.cos_lb_ratio,
+                                                            warm_restarts=self.config.cos_warm_restarts)
+                    case _:
+                        raise ValueError(f'Unknown scheduler: {self.config.warmup_scheduler}')
+
+                scheduler = WarmUpScheduler(scheduler_to_wrap=to_wrap,
+                                            warm_up_steps=self.config.warmup_max,
+                                            warm_up_metric=self.config.warmup_metric,
+                                            warm_up_routine=self.config.warmup_routine,
+                                            k=self.config.warmup_k,
+                                            lr_0=self.config.warmup_lr_0)
+                
+                scheduler_aux_config = {'monitor': self.config.warmup_metric.name.lower(),
+                                        'name': f'warmup_{self.config.warmup_scheduler.name.lower()}'}
             case _:
                 scheduler = None
-        
-        return {
-            'optimizer' : optimizer,
-            'lr_scheduler': {
-                'scheduler':scheduler,
-                'interval':'step',
-                'frequency':1,
-                'name':'Cosine'
-            }     
-        } if scheduler else optimizer
+            
+        if scheduler:
+            scheduler_config = {
+                'scheduler': scheduler,
+                'interval': 'step',
+                'frequency': 1,
+            } 
+            
+            scheduler_config = scheduler_config | scheduler_aux_config
+            
+            return {'optimizer': optimizer,
+                    'lr_scheduler': scheduler_config}
+            
+        return optimizer
 
     def _compute_optim_groups(self):
         lr_decay = set()

@@ -5,7 +5,7 @@ Usage:
     generate_template_yamls.py (-v | --version)
     
 Arguments:
-    <out_dir>              Path to output json file.
+    <out_dir>               Path to output dir for yamls.
     
 Options:
     -h --help               Shows this screen.

@@ -1,4 +1,4 @@
-''' chunkify_large_txt.py - extracts parquet data to txt
+''' chunkify_large_txt.py - splits large txt to smaller files
 Usage:
     chunkify_large_txt.py [options] <in_file.txt> <out_dir>
     chunkify_large_txt.py (-h | --help)
@@ -36,13 +36,13 @@ def process_file(file: TextIOWrapper, out_dir: Path, out_fn: str, lines: int):
         
         if counter >= lines:
             chunk_counter += 1
-            save_chunk(stem, out_dir, out_fn, lines_read, chunk_counter, logger)
+            save_chunk(stem, out_dir, out_fn, lines_read, chunk_counter)
             lines_read.clear()
             counter = 0
     
     if counter > 0:
         chunk_counter += 1
-        save_chunk(stem, out_dir, out_fn, lines_read, chunk_counter, logger)
+        save_chunk(stem, out_dir, out_fn, lines_read, chunk_counter)
         lines_read.clear() 
         counter = 0
     
