@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "diff-c-coder"
-version = "0.1.0"
+version = "0.1.1"
 description = "Diffusion Model based code generator from text."
 authors = ["Kamil Chrustowski <kachr@duck.com>"]
 readme = "README.md"
