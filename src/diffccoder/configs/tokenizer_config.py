@@ -17,4 +17,4 @@ class TokenizerConfig(BaseConfig):
     trim_offsets: bool = False
     vocab_size: int = 50000
     min_frequency: int = 2
-    special_tokens: list[str] = field(default_factory=list)
+    special_tokens: list[str] = field(default_factory=lambda: ['<|endoftext|>', '<|padding|>'])

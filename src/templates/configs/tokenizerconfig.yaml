@@ -6,8 +6,8 @@
     lowercase: false
     merges: null
     min_frequency: 2
-    special_tokens: []
+    special_tokens: !list [<|endoftext|>, <|padding|>]
     trim_offsets: false
     unicode_normalizer: null
     vocab: null
-    vocab_size: 50277
+    vocab_size: 50000

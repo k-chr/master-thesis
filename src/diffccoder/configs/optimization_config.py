@@ -1,12 +1,18 @@
 from dataclasses import dataclass
+import math
 from typing import Literal
 
 from diffccoder.configs.base import BaseConfig
+from diffccoder.configs.enums import (LRSchedulerType,
+                                      WarmUpMetric,
+                                      WarmUpRoutine,
+                                      OptimizerType)
+
 
 @dataclass
 class OptimizationConfig(BaseConfig):
-    optimizer: Literal['adam'] | Literal['sgd'] = 'adam'
-    lr_scheduler: Literal['step'] | Literal['cosine'] = 'cosine'
+    optimizer: OptimizerType = OptimizerType.ADAM
+    lr_scheduler: LRSchedulerType = LRSchedulerType.COSINE
     layerwise_lr: bool = False
     weight_decay: float = 0.9985
     lr_base: float = 0.01
@@ -26,7 +32,10 @@ class OptimizationConfig(BaseConfig):
     cos_lb_ratio: float | None = 0.25
     cos_warm_restarts: bool = True
     
-    warmup_tokens: int = 5000
-
-    
+    warmup_max: int = 5000
+    warmup_scheduler: LRSchedulerType = LRSchedulerType.COSINE
+    warmup_routine: WarmUpRoutine = WarmUpRoutine.SIN
+    warmup_metric: WarmUpMetric = WarmUpMetric.GLOBAL_STEP
+    warmup_k: float = math.e
+    warmup_lr_0: float = 0.0
     
