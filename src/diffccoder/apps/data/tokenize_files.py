@@ -1,11 +1,11 @@
-''' tokenize_files.py
+''' tokenize_files.py - Try to tokenize provided txt files and save them to numpy format.
 Usage:
     tokenize_files.py [options] <in_dir> <vocab.json> <list_dir.txt> <out_dir>
     tokenize_files.py (-h | --help)
     tokenize_files.py (-v | --version)
     
 Arguments:
-    <in_dir>                Path to directory with xmls.
+    <in_dir>                Path to directory with dataset.
     <vocab.json>            Path to input vocab json file.
     <list_dir.txt>          Path to file that contains directory names list to process.
     <out_dir>               Path to the output directory.
