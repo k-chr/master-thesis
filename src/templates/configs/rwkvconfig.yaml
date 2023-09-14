@@ -1,0 +1,15 @@
+!RWKVConfig
+    attention_hidden_size: null
+    bos_token_id: 0
+    context_length: 1024
+    embedding_size: 4096
+    eos_token_id: 0
+    intermediate_size: null
+    layer_norm_epsilon: 1.0e-05
+    num_hidden_layers: 32
+    qk_attention: 0
+    rescale_every: 6
+    tie_word_embeddings: false
+    use_cache: true
+    use_ffn_pre: false
+    vocab_size: 50277

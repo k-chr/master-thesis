@@ -1,0 +1,20 @@
+!OptimizationConfig
+    adam_betas: !!python/tuple
+        - 0.9
+        - 0.999
+    adam_eps: 1.0e-08
+    adam_fused: false
+    cos_eta_min: null
+    cos_lb_ratio: 0.25
+    cos_t0: 500
+    cos_t_decay: 1.15
+    cos_warm_restarts: true
+    layerwise_lr: false
+    lr_base: 0.01
+    lr_decay_rate: 0.985
+    lr_decay_step_size: 500
+    lr_scheduler: cosine
+    optimizer: adam
+    sgd_momentum: 0.95
+    warmup_tokens: 5000
+    weight_decay: 0.9985

@@ -1,0 +1,11 @@
+!DiffusionConfig
+    ddim_sample: false
+    gen_timesteps: 3000
+    infer_self_condition: false
+    mode: s2s
+    pred_len: -1
+    predict_xstart: true
+    rescale_timesteps: false
+    schedule_sampler: cosine
+    skip_sample: false
+    skip_timestep: 1000
