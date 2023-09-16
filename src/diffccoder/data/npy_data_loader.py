@@ -11,23 +11,43 @@ from diffccoder.data.utils import get_dir_list_from_file
 
 
 class NPYDataModule(LightningDataModule):
-    def __init__(self, in_dir: Path, dir_list_txt: Path) -> None:
+    def __init__(self, 
+                 in_dir: Path,
+                 dir_list_txt: Path,
+                 split_val_ratio: float = 0.2,
+                 use_pinned_memory=False,
+                 num_workers: int | None = None,
+                 batch_size: int = 1,
+                 val_batch_size: int = 1) -> None:
         self.root = in_dir
         self.npy_to_select = dir_list_txt
+        self.val_ratio = split_val_ratio
+        self.use_pinned_mem = use_pinned_memory
+        self.num_workers = num_workers
+        self.batch_size = batch_size
+        self.val_batch_size = val_batch_size
         
-    def train_dataloader(self) -> TRAIN_DATALOADERS:
-        return super().train_dataloader()
+    def train_dataloader(self) -> DataLoader:
+        DataLoader(self.npy_train,
+                   shuffle=True,
+                   num_workers=self.num_workers,
+                   batch_size=self.batch_size,
+                   pin_memory=self.use_pinned_mem)
     
-    def val_dataloader(self) -> EVAL_DATALOADERS:
-        DataLoader(self.npy_val, )
+    def val_dataloader(self) -> DataLoader:
+        DataLoader(self.npy_val,
+                   shuffle=False,
+                   num_workers=self.num_workers,
+                   batch_size=self.val_batch_size,
+                   pin_memory=self.use_pinned_mem)
     
-    def test_dataloader(self) -> EVAL_DATALOADERS:
+    def test_dataloader(self) -> DataLoader:
         return super().test_dataloader()
     
     def setup(self, stage: str) -> None:
         if stage == "fit" or stage is None:
             npy_all = NPYCLMDataset(self.root, self.npy_to_select)
-            self.npy_train, self.npy_val = random_split(npy_all, [0.8, 0.2])
+            self.npy_train, self.npy_val = random_split(npy_all, [1 - self.val_ratio, self.val_ratio])
 
         if stage == "test":
             assert False, 'Currently no test data'
