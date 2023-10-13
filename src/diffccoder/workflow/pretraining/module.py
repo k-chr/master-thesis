@@ -1,5 +1,4 @@
 from lightning import LightningModule
-from lightning.pytorch.utilities.types import STEP_OUTPUT
 import torch as t
 from torch.functional import F
 from torch.optim import Optimizer
@@ -21,33 +20,50 @@ class PretrainingModule(LightningModule):
         self.config = optimization_config
         self.model = GPT(config)
  
-    def training_step(self, batch: t.Tensor, batch_idx: int) -> STEP_OUTPUT:
+    def training_step(self, batch: t.Tensor, batch_idx: int) -> t.Tensor:
+        loss, rwkv_out, y = self._process_batch(batch)
+        self.log('train_loss', loss)
+        return L2Wrap.apply(loss)
+
+    def validation_step(self, batch: t.Tensor, batch_idx: int) -> t.Tensor:
+        loss, rwkv_out, y = self._process_batch(batch)
+        
+        return loss
+    
+    def _process_batch(self, batch: t.Tensor):
         x, y = batch
         rwkv_out: RWKVOutput = self.model(x)
 
-        loss = F.cross_entropy(rwkv_out.logits, y)
-
-        return L2Wrap.apply(loss)
+        shift_x_hat = rwkv_out.logits[..., :-1, :].contiguous()
+        shift_y = y[..., 1:].contiguous()
+        
+        loss = F.cross_entropy(shift_x_hat.view(-1, shift_x_hat.size(-1)),
+                               shift_y.view(-1))
+                               
+        return loss, rwkv_out, y
  
     def configure_optimizers(self) -> dict[str, Optimizer | dict[str, LRScheduler | int | str]] | Optimizer:
         optim_groups = self._compute_optim_groups()
             
-        optimizer: t.optim.Optimizer = None
-        
-        match self.config.optimizer:
-            case OptimizerType.ADAM:
-                optimizer = t.optim.Adam(params=optim_groups,
-                                         lr=self.config.lr_base,
-                                         eps=self.config.adam_eps,
-                                         betas=self.config.adam_betas,
-                                         fused=self.config.adam_fused)
-            case OptimizerType.SGD:
-                optimizer = t.optim.SGD(params=optim_groups,
-                                        lr=self.config.lr_base,
-                                        momentum=self.config.sgd_momentum)          
-            case _:
-                raise RuntimeError(f'Not implemented optimizer: {self.config.optimizer}')
+        optimizer: t.optim.Optimizer = self.__configure_optimizer(optim_groups)
             
+        scheduler_aux_config, scheduler = self.__configure_scheduler(optimizer)
+            
+        if scheduler:
+            scheduler_config = {
+                'scheduler': scheduler,
+                'interval': 'step',
+                'frequency': 1,
+            } 
+            
+            scheduler_config = scheduler_config | scheduler_aux_config
+            
+            return {'optimizer': optimizer,
+                    'lr_scheduler': scheduler_config}
+            
+        return optimizer
+
+    def __configure_scheduler(self, optimizer) -> tuple[dict[str, str], LRScheduler | None]:
         scheduler_aux_config = {}
         
         match self.config.lr_scheduler:
@@ -68,7 +84,6 @@ class PretrainingModule(LightningModule):
                 
                 scheduler_aux_config = {'name': 'cosine'}
             case LRSchedulerType.WARMUP:
-                
                 match self.config.warmup_scheduler:
                     case LRSchedulerType.STEP:
                         to_wrap = StepLR(optimizer=optimizer, 
@@ -96,19 +111,22 @@ class PretrainingModule(LightningModule):
                                         'name': f'warmup_{self.config.warmup_scheduler.name.lower()}'}
             case _:
                 scheduler = None
-            
-        if scheduler:
-            scheduler_config = {
-                'scheduler': scheduler,
-                'interval': 'step',
-                'frequency': 1,
-            } 
-            
-            scheduler_config = scheduler_config | scheduler_aux_config
-            
-            return {'optimizer': optimizer,
-                    'lr_scheduler': scheduler_config}
-            
+        return scheduler_aux_config,scheduler
+
+    def __configure_optimizer(self, optim_groups) -> Optimizer:
+        match self.config.optimizer:
+            case OptimizerType.ADAM:
+                optimizer = t.optim.Adam(params=optim_groups,
+                                         lr=self.config.lr_base,
+                                         eps=self.config.adam_eps,
+                                         betas=self.config.adam_betas,
+                                         fused=self.config.adam_fused)
+            case OptimizerType.SGD:
+                optimizer = t.optim.SGD(params=optim_groups,
+                                        lr=self.config.lr_base,
+                                        momentum=self.config.sgd_momentum)          
+            case _:
+                raise RuntimeError(f'Not implemented optimizer: {self.config.optimizer}')
         return optimizer
 
     def _compute_optim_groups(self):
