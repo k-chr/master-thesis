@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import torch as t
 from torch.autograd.function import Function
 from torch.utils.cpp_extension import load
@@ -7,8 +9,8 @@ from diffccoder.utils.rwkv_kernel_context import RWKVContext
 
 T_MAX = 1024 # increase this if your ctx_len is long [NOTE: TAKES LOTS OF VRAM!]
 # it's possible to go beyond CUDA limitations if you slice the ctx and pass the hidden state in each slice
-
-_wkv_cuda: Function = load(name="wkv", sources=["cuda/wkv_op.cpp", "cuda/wkv_cuda.cu"],
+_kernels = Path(__file__).resolve().parent
+_wkv_cuda: Function = load(name="wkv_cuda", sources=[ _kernels / "cuda/wkv_op.cpp", _kernels / "cuda/wkv_cuda.cu"],
                 verbose=True, extra_cuda_cflags=['-res-usage', '--maxrregcount 60', '--use_fast_math', '-O3', '-Xptxas -O3', f'-DTmax={T_MAX}'])
 
 

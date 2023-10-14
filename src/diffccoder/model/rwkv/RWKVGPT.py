@@ -52,8 +52,7 @@ class GPT(nn.Module):
         self.config = config
         RWKV_Init(self, config) 
 
-        logger.info(f"Number of parameters: {sum(p.numel()
-                    for p in self.parameters())}")
+        logger.info(f"Number of parameters: {sum(p.numel() for p in self.parameters())}")
     
     def get_ctx_len(self):
         return self.rwkv.context_length
