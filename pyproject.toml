@@ -46,4 +46,4 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
-runner = "diffccoder.runner:app.run"
+app = "diffccoder.runner:app.run"
