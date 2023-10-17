@@ -14,6 +14,7 @@ class ExperimentConfig(BaseConfig):
     number_of_workers: int = 1
     split_val_ratio: float = 0.2
     
+    exp_root: Path | None = None
     work_dir: Path | None = None
     data_dir: Path | None = None
     checkpoint_dir: Path | None = None
