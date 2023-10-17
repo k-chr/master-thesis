@@ -2,6 +2,8 @@
     batch_size: 128
     checkpoint_dir: null
     data_dir: null
+    exp_root: !Path
+        data: /home/psychopath/exp
     experiment_name: DIFFRWKV
     metrics_to_log: !list [loss, perplexity]
     mlflow_continue_run: true
