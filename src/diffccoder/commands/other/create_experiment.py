@@ -24,7 +24,7 @@ class CreateExperimentCommand(Command):
     def _create_exp(self, exp_name: str, use_mlflow: bool =True, init_run: bool =False):
         logger.info(f'Creating an experiment with name: {exp_name}')
 
-        config_dir = Path('.').home() / 'share' / 'exp' / exp_name / 'template_configs'
+        config_dir = Path.home() / 'share' / 'exp' / exp_name / 'template_configs'
         
         logger.info('Calling command "generate-template-configs" for new experiment.')
         self.call('generate-template-configs:handle', config_dir.__str__())
@@ -35,23 +35,12 @@ class CreateExperimentCommand(Command):
         exp_config.experiment_name = exp_name
         
         dump_config(exp_config, config_dir)
-
-        if init_run:
-            logger.info(f'Creating a new run for current experiment: {exp_name}.')
-            exp_config.work_dir = exp_config.exp_root / '000000'
-            exp_config.work_dir.mkdir(parents=True, exist_ok=True)
-            root = exp_config.exp_root
-            exp_config.checkpoint_dir = root / 'checkpoints'
-            exp_config.data_dir = root.home() / 'share' / 'data' / 'tokenized'
-            exp_config.out_dir = root / 'out'
-            _cfg_dir = exp_config.work_dir / 'configs'
-            
-            shutil.copytree(config_dir, _cfg_dir, dirs_exist_ok=True)
-            logger.info('Copied config templates to brand-new run directory tree.')
-            dump_config(exp_config, _cfg_dir)
         
         if use_mlflow:
-            return self._setup_mlflow_exp(exp_name, exp_config, _cfg_dir)
+            return self._setup_mlflow_exp(exp_name, exp_config, config_dir)
+
+        if init_run:
+            self.call('create-or-clone-run:handle', f'{exp_name} 000000')
 
     def _setup_mlflow_exp(self, exp_name: str, exp_config: ExperimentConfig, config_dir: Path):
         logger.debug(f'Environmental variables: {os.environ}')
@@ -66,16 +55,10 @@ class CreateExperimentCommand(Command):
             exp_config.mlflow_enabled = True
             exp_config.mlflow_server = os.environ['MLFLOW_TRACKING_URI']
             logger.info(f'Creating new experiment for: {os.environ["MLFLOW_TRACKING_URI"]} server')
-            exp = mlflow.create_experiment(exp_name, artifact_location=exp_config.exp_root)
-                
-            with mlflow.start_run(experiment_id=exp, run_name='000000') as run:
-                exp_config.mlflow_run_id = run.info.run_id
-                exp_config.mlflow_run_name = f'{run.info.run_name}'
-                        
+            exp_id = mlflow.create_experiment(exp_name, artifact_location=exp_config.exp_root)
+           
             dump_config(exp_config, config_dir)
-            
-            logger.success('Successfully updated run config')
-                   
+            logger.success(f'Successfully created new mlflow experiment: {exp_name} with id: {exp_id}')  
         else:
             logger.error(f'Experiment: {exp_name} exists!!!')
             return -1
