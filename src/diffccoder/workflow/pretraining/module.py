@@ -23,11 +23,14 @@ class PretrainingModule(LightningModule):
     def training_step(self, batch: t.Tensor, batch_idx: int) -> t.Tensor:
         loss, rwkv_out, y = self._process_batch(batch)
         self.log('train_loss', loss)
+        self.log('train_perplexity', t.exp(loss))
+        
         return L2Wrap.apply(loss)
 
     def validation_step(self, batch: t.Tensor, batch_idx: int) -> t.Tensor:
         loss, rwkv_out, y = self._process_batch(batch)
-        
+        self.log('validation_loss', loss)
+        self.log('validation_perplexity', t.exp(loss))
         return loss
     
     def _process_batch(self, batch: t.Tensor):
