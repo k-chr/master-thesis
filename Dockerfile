@@ -6,9 +6,12 @@ WORKDIR /master-thesis/
 ADD . /master-thesis/
 
 #cuda compilation issues, it is needed to install python3-dev
-RUN add-apt-repository ppa:deadsnakes/ppa
-RUN apt update
 RUN apt-get update && \
+    apt-get -y install sudo
+
+RUN useradd -m docker && echo "docker:docker" | chpasswd && adduser docker sudo
+RUN sudo add-apt-repository ppa:deadsnakes/ppa
+RUN apt update && \
     apt -y install python3.10-dev
 RUN pip install poetry
 
