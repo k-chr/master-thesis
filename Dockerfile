@@ -6,7 +6,7 @@ WORKDIR /master-thesis/
 ADD . /master-thesis/
 
 #cuda compilation issues, it is needed to install python3-dev
-
+RUN cp /etc/apt/sources.list /etc/apt/sources.list.bak && sed -i -re 's/([a-z]{2}\.)?archive.ubuntu.com|security.ubuntu.com/old-releases.ubuntu.com/g' /etc/apt/sources.list
 RUN apt-get update && \
     apt -y install python3.10-dev
 RUN pip install poetry
