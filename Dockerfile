@@ -20,7 +20,7 @@ RUN apt update && \
 RUN pip install poetry
 
 RUN poetry config virtualenvs.create false --local
-RUN poetry config virtualenvs.options.system-site-packages = true
+RUN poetry config virtualenvs.options.system-site-packages true
 
 RUN poetry install
 
