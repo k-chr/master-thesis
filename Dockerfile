@@ -14,7 +14,8 @@ RUN useradd -m docker && echo "docker:docker" | chpasswd && adduser docker sudo
 RUN sudo apt -y install --reinstall software-properties-common
 RUN sudo add-apt-repository ppa:deadsnakes/ppa
 RUN apt update && \
-    apt -y install python3.11 python3.11-dev python3.11-distutils python3-pip
+    apt -y remove python3.10 && \
+    apt -y install python3.11 python3.11-dev python3.11-distutils python3.11-pip
 
 RUN pip install poetry
 
