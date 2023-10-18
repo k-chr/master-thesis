@@ -8,12 +8,12 @@ ADD . /master-thesis/
 #cuda compilation issues, it is needed to install python3-dev
 
 RUN apt-get update && \
-    apt-get install python3.11 && \
+    apt-get -y install python3 && \
     apt-get -y install python3-dev
 
 RUN pip install poetry
 
-RUN poetry config virtualenvs.create false
+RUN poetry config virtualenvs.options.system-site-packages false
 
 RUN poetry install
 
