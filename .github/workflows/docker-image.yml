@@ -37,4 +37,4 @@ jobs:
           "MLFLOW_TRACKING_PASSWORD=${{ secrets.MLFLOW_TRACKING_PASSWORD }}"
           
     # List of tags
-        tags: ${{ secrets.DOCKER_USERNAME }}/model-runner:master
+        tags: ${{ secrets.DOCKER_USERNAME }}/model-runner:latest

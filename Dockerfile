@@ -22,6 +22,8 @@ RUN pip install poetry --quiet
 RUN poetry config virtualenvs.create false
 RUN poetry config virtualenvs.options.system-site-packages true
 
-RUN poetry install
+RUN --mount=type=cache,target=/home/.cache/pypoetry/cache \
+    --mount=type=cache,target=/home/.cache/pypoetry/artifacts \
+    poetry install
 
 ENTRYPOINT [ "poetry", "run", "app"]
