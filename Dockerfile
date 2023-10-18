@@ -20,7 +20,7 @@ RUN pip install poetry
 
 RUN poetry config virtualenvs.create false --local
 RUN poetry config virtualenvs.options.system-site-packages true
-RUN poetry env use 3.10
+
 RUN poetry install
 
 ENTRYPOINT [ "poetry", "run", "app"]
