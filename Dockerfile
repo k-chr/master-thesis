@@ -16,12 +16,12 @@ RUN sudo apt -y install --reinstall software-properties-common --no-install-reco
 RUN sudo add-apt-repository ppa:deadsnakes/ppa
 RUN sudo apt update && \
     apt -y install python3-dev --no-install-recommends --no-install-suggests
-    
+
 USER docker
 
 RUN pip install poetry
 
-RUN poetry config virtualenvs.create false --local
+RUN poetry config virtualenvs.create false
 RUN poetry config virtualenvs.options.system-site-packages true
 
 RUN poetry install
