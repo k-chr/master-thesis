@@ -1,7 +1,7 @@
-FROM pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime
+FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
 
 ENV PYTHONUNBUFFERED True
-
+RUN python --version
 WORKDIR /master-thesis/
 ADD . /master-thesis/
 
