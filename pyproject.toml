@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "diff-c-coder"
-version = "0.1.0"
+version = "0.1.1"
 description = "Diffusion Model based code generator from text."
 authors = ["Kamil Chrustowski <kachr@duck.com>"]
 readme = "README.md"
@@ -26,6 +26,9 @@ fastparquet = "^2023.8.0"
 docopt = "^0.6.2"
 lxml = "^4.9.3"
 chardet = "^5.2.0"
+dask = "^2023.9.1"
+cleo = "^2.0.1"
+ninja = "^1.11.1.1"
 
 
 [[tool.poetry.source]]
@@ -41,3 +44,6 @@ priority = "primary"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+app = "diffccoder.runner:app.run"
