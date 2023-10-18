@@ -1,4 +1,4 @@
-FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
+FROM pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime
 
 ENV PYTHONUNBUFFERED True
 ENV TZ=Europe/Warsaw
@@ -8,14 +8,13 @@ ADD . /master-thesis/
 
 #cuda compilation issues, it is needed to install python3-dev
 RUN apt-get update && \
-    apt-get -y install sudo
+    apt-get -y install sudo --no-install-recommends --no-install-suggests
 
 RUN useradd -m docker && echo "docker:docker" | chpasswd && adduser docker sudo
-RUN sudo apt -y install --reinstall software-properties-common
+RUN sudo apt -y install --reinstall software-properties-common --no-install-recommends --no-install-suggests
 RUN sudo add-apt-repository ppa:deadsnakes/ppa
 RUN apt update && \
-    apt -y remove python3.10; \
-    apt -y install python3.11 python3.11-dev python3.11-distutils python3-pip
+    apt -y install python3-dev --no-install-recommends --no-install-suggests
 
 RUN pip install poetry
 
