@@ -17,6 +17,10 @@ RUN apt update && \
     apt -y install python3.11 python3.11-dev python3.11-distutils python3-pip
 
 RUN pip install poetry
+
+RUN poetry config virtualenvs.create false --local
+RUN poetry config virtualenvs.options.system-site-packages = true
+
 RUN poetry install
 
 ENTRYPOINT [ "poetry", "run", "app"]
