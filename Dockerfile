@@ -13,7 +13,7 @@ RUN apt-get update && \
 RUN pip install poetry
 
 RUN poetry config virtualenvs.create false
-RUN poetry env use 3.11
+
 RUN poetry install
 
 ENTRYPOINT [ "poetry", "run", "app"]
