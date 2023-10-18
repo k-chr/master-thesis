@@ -10,6 +10,7 @@ RUN apt-get update && \
     apt-get -y install sudo
 
 RUN useradd -m docker && echo "docker:docker" | chpasswd && adduser docker sudo
+RUN sudo apt install --reinstall software-properties-common
 RUN sudo add-apt-repository ppa:deadsnakes/ppa
 RUN apt update && \
     apt -y install python3.10-dev
