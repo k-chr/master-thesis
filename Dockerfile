@@ -16,7 +16,7 @@ RUN apt update && \
     apt -y install python3.10-dev
 RUN pip install poetry
 
-RUN poetry env use system
+RUN poetry env use 3.10
 RUN poetry config virtualenvs.options.system-site-packages false
 
 RUN poetry install
