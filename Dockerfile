@@ -1,7 +1,8 @@
 FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
 
 ENV PYTHONUNBUFFERED True
-
+ENV TZ=Europe/Warsaw
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 WORKDIR /master-thesis/
 ADD . /master-thesis/
 
@@ -14,7 +15,7 @@ RUN sudo apt -y install --reinstall software-properties-common
 RUN sudo add-apt-repository ppa:deadsnakes/ppa
 RUN apt update && \
     apt -y install python3.11 python3.11-dev python3.11-distutils
-    
+
 RUN pip install poetry
 RUN poetry install
 
