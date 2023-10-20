@@ -31,12 +31,10 @@ cleo = "^2.0.1"
 ninja = "^1.11.1.1"
 questionary = "^2.0.1"
 
-
 [[tool.poetry.source]]
 name = "torch"
 url = "https://download.pytorch.org/whl/cu118" #"https://download.pytorch.org/whl/"
 priority = "supplemental"
-
 
 [[tool.poetry.source]]
 name = "PyPI"
@@ -48,3 +46,9 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
 app = "diffccoder.runner:app.run"
+
+[tool.poe.poetry_hooks]
+pre_run = 'read-dotenv'
+
+[tool.poe.tasks.read-dotenv]
+cmd = "set -a && source ~/.env && set +a"

@@ -33,8 +33,9 @@ jobs:
         push: true
     # List of secrets to expose to the build (e.g., key=string, GIT_AUTH_TOKEN=mytoken)
         secrets: |
-          "MFLOW_TRACKING_USERNAME=${{ secrets.MLFLOW_TRACKING_USERNAME }}"
+          "MLFLOW_TRACKING_USERNAME=${{ secrets.MLFLOW_TRACKING_USERNAME }}"
           "MLFLOW_TRACKING_PASSWORD=${{ secrets.MLFLOW_TRACKING_PASSWORD }}"
+          "MLFLOW_TRACKING_URI=${{ secrets.MLFLOW_TRACKING_URI }}"
           
     # List of tags
-        tags: ${{ secrets.DOCKER_USERNAME }}/model-runner:master
+        tags: ${{ secrets.DOCKER_USERNAME }}/model-runner:latest

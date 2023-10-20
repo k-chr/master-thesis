@@ -9,20 +9,26 @@ ADD . /master-thesis/
 RUN apt-get update && \
     apt-get -y -qq install sudo --no-install-recommends --no-install-suggests
 
-RUN useradd -m docker && echo "docker:docker" | chpasswd && adduser docker sudo
+RUN useradd -m --no-log-init --system rekcod -g docker && echo "docker ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+USER rekcod
 RUN sudo apt -y -qq install --reinstall software-properties-common --no-install-recommends --no-install-suggests
 RUN sudo add-apt-repository ppa:deadsnakes/ppa
 RUN apt update --no-install-recommends --no-install-suggests && \
     apt -y -qq remove python3.10 python3.10-dev python3.10-distutils && \
     apt -y -qq install python3.11 python3.11-dev python3.11-distutils python3-pip --no-install-recommends --no-install-suggests
-
+RUN alternatives --set python /usr/bin/python3.11 && alternatives --install /usr/bin/pip pip /usr/bin/pip3 1
 RUN pip install poetry --quiet
 
 RUN poetry config virtualenvs.create false
 RUN poetry config virtualenvs.options.system-site-packages true
-
-RUN --mount=type=cache,target=/root/.cache/pypoetry/cache \
-    --mount=type=cache,target=/root/.cache/pypoetry/artifacts \
+RUN echo $(poetry config cache-dir)
+RUN --mount=type=cache,target=~/.cache/pypoetry/cache \
+    --mount=type=cache,target=~/.cache/pypoetry/artifacts \
     poetry install
+
+RUN --mount=type=secret,id=MLFLOW_TRACKING_USERNAME \
+    --mount=type=secret,id=MLFLOW_TRACKING_PASSWORD \
+    --mount=type=secret,id=MLFLOW_TRACKING_URI \
+    poetry run app set-dotenv MLFLOW_TRACKING_USERNAME MLFLOW_TRACKING_PASSWORD MLFLOW_TRACKING_URI
 
 ENTRYPOINT [ "poetry", "run", "app"]
