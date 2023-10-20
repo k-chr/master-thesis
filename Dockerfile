@@ -11,11 +11,11 @@ ADD . /master-thesis/
 RUN apt-get update && \
     apt-get -y -qq install sudo --no-install-recommends --no-install-suggests
 
-RUN groupadd -f docker && \
-    useradd --no-log-init --system rekcod -g docker && \
-    usermod -aG sudo rekcod && \
-    echo "rekcod ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
-USER rekcod
+# RUN groupadd -f docker && \
+#     useradd --no-log-init --system rekcod -g docker && \
+#     usermod -aG sudo rekcod && \
+#     echo "rekcod ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+# USER rekcod
 
 RUN sudo apt -y -qq install --reinstall software-properties-common --no-install-recommends --no-install-suggests
 RUN sudo add-apt-repository ppa:deadsnakes/ppa
