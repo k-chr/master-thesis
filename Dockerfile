@@ -31,7 +31,8 @@ RUN pip install poetry --quiet && \
 
 RUN --mount=type=cache,target=~/.cache/pypoetry/cache \
     --mount=type=cache,target=~/.cache/pypoetry/artifacts \
-    poetry install
+    poetry install && \
+    poetry run pip list
 
 RUN --mount=type=secret,id=MLFLOW_TRACKING_USERNAME \
     --mount=type=secret,id=MLFLOW_TRACKING_PASSWORD \
