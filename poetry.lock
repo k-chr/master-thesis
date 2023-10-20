@@ -4902,7 +4902,7 @@ opt-einsum = ["opt-einsum (>=3.3)"]
 
 [package.source]
 type = "legacy"
-url = "https://download.pytorch.org/whl/cu118"
+url = "https://download.pytorch.org/whl"
 reference = "torch"
 
 [[package]]
@@ -5306,4 +5306,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "babba50a3c59f8be4572d4fb9dd4b30bf73498c5eabfe7cb7838adcf4658e64e"
+content-hash = "492898a757dbeac4a93ddaad17a2077a29285891909c43af182dc3d526cfa3e1"
