@@ -19,9 +19,9 @@ USER rekcod
 
 RUN sudo apt -y -qq install --reinstall software-properties-common --no-install-recommends --no-install-suggests
 RUN sudo add-apt-repository ppa:deadsnakes/ppa
-RUN apt update --no-install-recommends --no-install-suggests && \
-    apt -y -qq remove python3.10 python3.10-dev python3.10-distutils && \
-    apt -y -qq install python3.11 python3.11-dev python3.11-distutils python3-pip --no-install-recommends --no-install-suggests
+RUN sudo apt update --no-install-recommends --no-install-suggests && \
+    sudo apt -y -qq remove python3.10 python3.10-dev python3.10-distutils && \
+    sudo apt -y -qq install python3.11 python3.11-dev python3.11-distutils python3-pip --no-install-recommends --no-install-suggests
 RUN alternatives --set python /usr/bin/python3.11 && alternatives --install /usr/bin/pip pip /usr/bin/pip3 1
 
 RUN pip install poetry --quiet && \
