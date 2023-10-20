@@ -11,7 +11,9 @@ ADD . /master-thesis/
 RUN apt-get update && \
     apt-get -y -qq install sudo --no-install-recommends --no-install-suggests
 
-RUN useradd -m --no-log-init --system rekcod -g docker && echo "docker ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+RUN groupadd -f docker && \
+    useradd -m --no-log-init --system rekcod -g docker && \
+    echo "docker ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 USER rekcod
 
 RUN sudo apt -y -qq install --reinstall software-properties-common --no-install-recommends --no-install-suggests
