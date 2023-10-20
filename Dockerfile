@@ -23,7 +23,7 @@ RUN sudo apt update --no-install-recommends --no-install-suggests && \
     sudo apt -y -qq remove python3.10 python3.10-dev python3.10-distutils && \
     sudo apt -y -qq install python3.11 python3.11-dev python3.11-distutils python3-pip --no-install-recommends --no-install-suggests
 RUN sudo update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1 && sudo update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 1
-
+RUN python --version
 RUN pip install poetry --quiet && \
     poetry config virtualenvs.create false && \
     poetry config virtualenvs.options.system-site-packages true && \
@@ -32,7 +32,7 @@ RUN pip install poetry --quiet && \
 RUN --mount=type=cache,target=~/.cache/pypoetry/cache \
     --mount=type=cache,target=~/.cache/pypoetry/artifacts \
     poetry install && \
-    poetry run pip list
+    poetry run python --version
 
 RUN --mount=type=secret,id=MLFLOW_TRACKING_USERNAME \
     --mount=type=secret,id=MLFLOW_TRACKING_PASSWORD \
