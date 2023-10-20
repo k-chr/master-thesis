@@ -12,7 +12,7 @@ RUN apt-get update && \
     apt-get -y -qq install sudo --no-install-recommends --no-install-suggests
 
 RUN groupadd -f docker && \
-    useradd -ms /bin/bash --no-log-init --system rekcod -g docker && \
+    useradd --no-log-init --system rekcod -g docker && \
     usermod -aG sudo rekcod && \
     echo "rekcod ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 USER rekcod
