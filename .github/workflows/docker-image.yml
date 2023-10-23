@@ -38,4 +38,4 @@ jobs:
           "MLFLOW_TRACKING_URI=${{ secrets.MLFLOW_TRACKING_URI }}"
           
     # List of tags
-        tags: ${{ secrets.DOCKER_USERNAME }}/model-runner:latest
+        tags: ${{ secrets.DOCKER_USERNAME }}/model-runner:master
