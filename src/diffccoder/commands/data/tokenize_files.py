@@ -23,7 +23,7 @@ def save_encoded(tokenizer: Tokenizer,
         npz_path = file_path.with_suffix('.npz')
         f_name = npz_path.name
         npz_dir = (out_dir / npz_path.parent.parent.stem / npz_path.parent.stem)
-        npz_dir.mkdir(mode=777, parents=True, exist_ok=True)
+        npz_dir.mkdir(parents=True, exist_ok=True)
         
         npz_path = npz_dir / f_name
         

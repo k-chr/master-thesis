@@ -89,6 +89,7 @@ class PreTrainingCommand(Command):
                                 callbacks=_callbacks)
                                 
         net_module = PretrainingModule(optim_cfg, rwkv_cfg)
-        
-        model_runner.fit(net_module, datamodule=data_module)
+        ckpt_path: Path = exp_config.work_dir / 'artifacts' / 'last.ckpt'
+        kwargs = {'ckpt_path':ckpt_path} if ckpt_path.is_file() else {}
+        model_runner.fit(net_module, datamodule=data_module, **kwargs)
     

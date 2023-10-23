@@ -112,7 +112,7 @@ class CreateOrCloneRunCommand(Command):
         
         exp_name = self.argument('experiment-name')
         run_name = self.argument('run-name') or self._get_new_run_name(exp_name)
-        run_to_clone = self.argument('run_to_clone')
+        run_to_clone = self.argument('run-to-clone')
         
         if run_to_clone:
             assert run_name != run_to_clone

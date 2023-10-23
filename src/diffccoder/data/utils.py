@@ -11,7 +11,7 @@ def save_chunk(stem: str,
     new_dir = out_dir / (stem + f'_part_{chunk_counter}')
  
     if not new_dir.is_dir():
-        new_dir.mkdir(mode=777, parents=True, exist_ok=True)
+        new_dir.mkdir(parents=True, exist_ok=True)
                 
     out_path = (new_dir / out_fn).with_suffix('.txt')
             

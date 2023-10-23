@@ -29,7 +29,7 @@ class ExtractParquetCommand(Command):
         out_dir = Path(self.argument('out-dir')) / in_dir.stem
 
         if not out_dir.is_dir():
-            out_dir.mkdir(mode=777, parents=True, exist_ok=True)
+            out_dir.mkdir(parents=True, exist_ok=True)
 
         parquets = find_parquet_files_in_dir(in_dir)
         logger.info(f'Found {len(parquets)} files')

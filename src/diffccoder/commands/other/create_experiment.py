@@ -1,6 +1,5 @@
 import os
 from pathlib import Path
-import shutil
 
 from cleo.commands.command import Command
 from cleo.helpers import argument, option
@@ -26,12 +25,13 @@ class CreateExperimentCommand(Command):
 
         config_dir = Path.home() / 'share' / 'exp' / exp_name / 'template_configs'
         
-        logger.info('Calling command "generate-template-configs" for new experiment.')
-        self.call('generate-template-configs:handle', config_dir.__str__())
+        logger.info('Calling command "generate-template-yamls" for new experiment.')
+        self.call('generate-template-yamls', f'PLACEHOLDER {config_dir.__str__()}')
         
         exp_config: ExperimentConfig = load_config(config_dir / 'experimentconfig.yaml')
         
         exp_config.exp_root = config_dir.parent
+        exp_config.mlflow_enabled = use_mlflow
         exp_config.experiment_name = exp_name
         
         dump_config(exp_config, config_dir)
@@ -40,7 +40,7 @@ class CreateExperimentCommand(Command):
             return self._setup_mlflow_exp(exp_name, exp_config, config_dir)
 
         if init_run:
-            self.call('create-or-clone-run:handle', f'{exp_name} 000000')
+            self.call('create-or-clone-run', f'PLACEHOLDER {exp_name} 000000')
 
     def _setup_mlflow_exp(self, exp_name: str, exp_config: ExperimentConfig, config_dir: Path):
         logger.debug(f'Environmental variables: {os.environ}')

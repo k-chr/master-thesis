@@ -5,9 +5,9 @@ from cleo.commands.command import Command
 from cleo.helpers import argument
 
 
-class SetEnvCommand(Command):
-    name = 'set-env'
-    description = 'set_env.py - Exports provided enviroment variables to .env file.'
+class SetDotEnvCommand(Command):
+    name = 'set-dotenv'
+    description = 'set_dotenv.py - Exports provided enviroment variables to .env file.'
     arguments = [argument('env-var',
                           multiple=True,
                           description='Variables to store.')]

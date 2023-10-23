@@ -33,7 +33,7 @@ class GenerateTemplateYamlsCommand(Command):
         out_dir = Path(self.argument('out-dir'))
 
         if not out_dir.is_dir():
-            out_dir.mkdir(mode=777, parents=True, exist_ok=True)
+            out_dir.mkdir(parents=True, exist_ok=True)
 
         dump_config(diffusion, out_dir)
         dump_config(optimization, out_dir)
