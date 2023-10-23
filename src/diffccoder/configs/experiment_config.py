@@ -8,6 +8,8 @@ from diffccoder.configs.base import BaseConfig
 class ExperimentConfig(BaseConfig):
     experiment_name: str | None = 'DIFFRWKV'
     
+    from_pretrained: Path | None = None
+    
     batch_size: int = 128
     val_batch_size: int = 32
     pin_memory: bool = True
