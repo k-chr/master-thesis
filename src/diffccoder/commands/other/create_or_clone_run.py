@@ -52,7 +52,7 @@ class CreateOrCloneRunCommand(Command):
             return self._setup_mlflow_run(exp_name, dst_run, src_config, dst_config_dir)
         
     def _create_run(self, exp_name: str, run_name: str):
-        logger.info(f'Creating an run with name: {run_name}')
+        logger.info(f'Creating a run with name: {run_name}')
 
         root_config_dir = Path.home() / 'share' / 'exp' / exp_name / 'template_configs'
         

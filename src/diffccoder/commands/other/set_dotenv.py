@@ -3,7 +3,7 @@ from pathlib import Path
 
 from cleo.commands.command import Command
 from cleo.helpers import argument
-
+from loguru import logger
 
 class SetDotEnvCommand(Command):
     name = 'set-dotenv'
@@ -14,8 +14,9 @@ class SetDotEnvCommand(Command):
 
     def handle(self) -> int:
         variables: list[str] = self.argument('env-var')
-        path: Path = Path('~/.env')
+        logger.info(f'Saving selected environment variables to file, variables: {variables}')
+        path: Path = Path.home() / '.env'
         
         with open(path, 'w', encoding='utf8') as f:
             for var in variables:
-                f.write(f'{var}={os.environ.get(var, "")}\n')
+                f.write(f'{var}={os.environ[var]}\n')

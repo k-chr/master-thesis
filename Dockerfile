@@ -2,19 +2,12 @@ FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
 
 ENV PYTHONUNBUFFERED True
 ENV TZ=Europe/Warsaw
-ENV POETRY_DOTENV_LOCATION='~/.env'
-
+ENV POETRY_DOTENV_LOCATION=~/.env
+ENV PYTHONDONTWRITEBYTECODE 1
 WORKDIR /master-thesis/
 ADD . /master-thesis/
 
-RUN --mount=type=cache,target=~/.cache/pypoetry/cache \
-    --mount=type=cache,target=~/.cache/pypoetry/artifacts \
-    --mount=type=cache,target=~/.cache/pip/http \
-    --mount=type=cache,target=~/.cache/pip/wheels \
-    --mount=type=secret,id=MLFLOW_TRACKING_USERNAME \
-    --mount=type=secret,id=MLFLOW_TRACKING_PASSWORD \
-    --mount=type=secret,id=MLFLOW_TRACKING_URI \
-    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && \
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && \
     apt-get update && \
     apt-get -y -qq install sudo --no-install-recommends --no-install-suggests && \
     sudo apt -y -qq install --reinstall software-properties-common --no-install-recommends --no-install-suggests && \
@@ -28,17 +21,34 @@ RUN --mount=type=cache,target=~/.cache/pypoetry/cache \
     sudo update-alternatives --install /usr/bin/pip pip /usr/local/lib/python3.11/dist-packages/pip 1 && \ 
     sudo chmod 777 /usr/local/lib/python3.11/dist-packages/pip && \
     sudo apt -y -qq remove python3.10 python3.10-dev python3.10-distutils && \
-    sudo apt -y autoremove && sudo apt -y clean && \
-    touch '/root/.env' && \
-    sudo chmod 777 '/root/.env' && \
+    sudo apt -y autoremove && sudo apt -y clean
+
+RUN --mount=type=cache,target=/root/.cache/pip/ \
     python -m pip install poetry --quiet && \
     poetry config virtualenvs.create false && \
     poetry config virtualenvs.options.system-site-packages true && \
-    poetry self add poetry-dotenv-plugin && \
-    poetry install && \
-    poetry run python --version && \
+    poetry self add poetry-dotenv-plugin
+
+RUN --mount=type=cache,target=/root/.cache/pypoetry/cache \
+    --mount=type=cache,target=/root/.cache/pypoetry/artifacts \
+    poetry install
+
+RUN poetry run python --version && \
     poetry env info && \
-    poetry run python -c "import diffccoder; import torch as t; print(t.cuda.is_available())" && \
-    poetry run app set-dotenv MLFLOW_TRACKING_USERNAME MLFLOW_TRACKING_PASSWORD MLFLOW_TRACKING_URI
+    poetry run python -c "import diffccoder; import torch as t;" && \
+    du -h --max-depth=1 ~/.cache/
+
+RUN --mount=type=secret,id=MLFLOW_TRACKING_USERNAME \
+    --mount=type=secret,id=MLFLOW_TRACKING_PASSWORD \
+    --mount=type=secret,id=MLFLOW_TRACKING_URI \
+    export MLFLOW_TRACKING_USERNAME=$(cat /run/secrets/MLFLOW_TRACKING_USERNAME) && \
+    export MLFLOW_TRACKING_PASSWORD=$(cat /run/secrets/MLFLOW_TRACKING_PASSWORD) && \
+    export MLFLOW_TRACKING_URI=$(cat /run/secrets/MLFLOW_TRACKING_URI) && \
+    touch ~/.env && \
+    sudo chmod 777 ~/.env && \
+    ls -la ~/.env && \
+    poetry run -vvv app set-dotenv MLFLOW_TRACKING_USERNAME MLFLOW_TRACKING_PASSWORD MLFLOW_TRACKING_URI -vvv
+
+ENV PYTHONDONTWRITEBYTECODE 0
 
 ENTRYPOINT [ "poetry", "run", "app"]
