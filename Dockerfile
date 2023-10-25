@@ -2,7 +2,7 @@ FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
 
 ENV PYTHONUNBUFFERED True
 ENV TZ=Europe/Warsaw
-ENV POETRY_DOTENV_LOCATION=~/.env
+ENV POETRY_DOTENV_LOCATION=/root/.env
 ENV PYTHONDONTWRITEBYTECODE 1
 WORKDIR /master-thesis/
 ADD . /master-thesis/
