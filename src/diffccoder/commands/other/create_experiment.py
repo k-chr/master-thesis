@@ -55,7 +55,7 @@ class CreateExperimentCommand(Command):
             exp_config.mlflow_enabled = True
             exp_config.mlflow_server = os.environ['MLFLOW_TRACKING_URI']
             logger.info(f'Creating new experiment for: {os.environ["MLFLOW_TRACKING_URI"]} server')
-            exp_id = mlflow.create_experiment(exp_name, artifact_location=exp_config.exp_root)
+            exp_id = mlflow.create_experiment(exp_name, artifact_location=exp_config.exp_root.__str__())
            
             dump_config(exp_config, config_dir)
             logger.success(f'Successfully created new mlflow experiment: {exp_name} with id: {exp_id}')  
