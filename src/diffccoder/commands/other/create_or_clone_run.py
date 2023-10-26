@@ -86,7 +86,7 @@ class CreateOrCloneRunCommand(Command):
         exp = mlflow.get_experiment_by_name(exp_name)
 
         if exp:                
-            with mlflow.start_run(experiment_id=exp, run_name=run_name) as run:
+            with mlflow.start_run(experiment_id=exp.experiment_id, run_name=run_name) as run:
                 exp_config.mlflow_run_id = run.info.run_id
                 exp_config.mlflow_run_name = f'{run.info.run_name}'
                         
