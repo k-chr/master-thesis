@@ -1,3 +1,4 @@
+from dataclasses import asdict
 from typing import Iterable
 
 from lightning import Trainer
@@ -14,8 +15,8 @@ class ModelRunner(Trainer):
                  logger: Logger | Iterable[Logger] | bool | None = None,
                  debug_config: DebugTrainerConfig | None = None) -> None:
         
-        super().__init__(**(debug_config if debug_config else DebugTrainerConfig()),
-                         **trainer_config,
+        super().__init__(**asdict((debug_config if debug_config else DebugTrainerConfig())),
+                         **asdict(trainer_config),
                          callbacks=callbacks,
                          logger=logger)
         

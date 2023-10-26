@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import dask.array as da
+from dask.array.core import Array
 from lightning.pytorch import LightningDataModule
 from lightning.pytorch.utilities.types import EVAL_DATALOADERS, TRAIN_DATALOADERS
 import numpy as np
@@ -26,16 +27,18 @@ class NPYDataModule(LightningDataModule):
         self.num_workers = num_workers
         self.batch_size = batch_size
         self.val_batch_size = val_batch_size
+        self.prepare_data_per_node = False
+        self.allow_zero_length_dataloader_with_multiple_devices = True
         
     def train_dataloader(self) -> DataLoader:
-        DataLoader(self.npy_train,
+        return DataLoader(self.npy_train,
                    shuffle=True,
                    num_workers=self.num_workers,
                    batch_size=self.batch_size,
                    pin_memory=self.use_pinned_mem)
     
     def val_dataloader(self) -> DataLoader:
-        DataLoader(self.npy_val,
+        return DataLoader(self.npy_val,
                    shuffle=False,
                    num_workers=self.num_workers,
                    batch_size=self.val_batch_size,
@@ -64,16 +67,16 @@ class NPYCLMDataset(Dataset):
         
         mmaps: list[np.memmap] = [np.load(in_dir / npy_dir / 'data.npy', mmap_mode='r') for npy_dir in dir_list]
         
-        self.mmap = da.concatenate(mmaps)        
+        self.mmap: Array = da.concatenate(mmaps)        
             
-        self.__len = self.mmap.shape()[0]
+        self.__len = self.mmap.shape[0] #shape is cached-property, so as a result it is 'tuple' not 'callable' in runtime
         
     def __len__(self):
         return self.__len
     
     def __getitem__(self, index) -> tuple[int, t.Tensor, t.Tensor]:
         
-        data: t.Tensor = t.from_numpy(self.mmap[index])
+        data: t.Tensor = t.from_numpy(self.mmap[index].compute())
         
         x, y = data, data.clone()
         

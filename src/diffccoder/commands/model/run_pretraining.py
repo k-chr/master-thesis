@@ -29,7 +29,7 @@ class PreTrainingCommand(Command):
     def handle(self) -> int:
         exp_config_path = Path(self.argument('pretraining-yaml'))
         exp_config: ExperimentConfig = load_config(exp_config_path)
-        config_dir = exp_config.work_dir / 'config'
+        config_dir = exp_config.work_dir / 'configs'
         
         data_module = NPYDataModule(in_dir=exp_config.data_dir,
                                     dir_list_txt=config_dir / 'pre-train_dir_list.txt',
@@ -88,8 +88,9 @@ class PreTrainingCommand(Command):
                                 logger=_logger,
                                 callbacks=_callbacks)
                                 
-        net_module = PretrainingModule(optim_cfg, rwkv_cfg)
         ckpt_path: Path = exp_config.work_dir / 'artifacts' / 'last.ckpt' if not exp_config.from_pretrained else exp_config.from_pretrained
         kwargs = {'ckpt_path':ckpt_path} if ckpt_path.is_file() else {}
+        net_module = PretrainingModule(optim_cfg, rwkv_cfg, skip_init=bool(kwargs))
+        logger.info(f'Running on: {model_runner.accelerator}; Skipping initialization?: {bool(kwargs)}')
         model_runner.fit(net_module, datamodule=data_module, **kwargs)
     

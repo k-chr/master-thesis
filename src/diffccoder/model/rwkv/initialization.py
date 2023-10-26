@@ -1,13 +1,13 @@
 import math
 
-import loguru
+from loguru import logger
 import torch as t
 from torch import nn
 
 from diffccoder.configs.rwkv_config import RWKVConfig
 
 
-def RWKV_Init(model: nn.Module, args: RWKVConfig, logger: 'loguru.Logger'):  # fancy initialization of all lin & emb layer in the model
+def RWKV_Init(model: nn.Module, args: RWKVConfig):  # fancy initialization of all lin & emb layer in the model
     logger.info("\n[--> first run, init model params (very slow for large models) <--]")
     logger.info("[so you shall only do it for 1 single GPU and save the checkpt and load it when using multiple GPU]\n")
 

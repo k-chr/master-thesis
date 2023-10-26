@@ -63,7 +63,7 @@ class CreateOrCloneRunCommand(Command):
         exp_config.work_dir = exp_config.exp_root / 'runs' / run_name
         exp_config.work_dir.mkdir(parents=True, exist_ok=True)
         exp_config.checkpoint_dir = exp_config.work_dir / 'checkpoints'
-        exp_config.data_dir = Path.home() / 'share' / 'data'
+        exp_config.data_dir = Path.home() / 'share' / 'dataset'
         exp_config.out_dir = exp_config.work_dir / 'out'
         config_dir = exp_config.work_dir / 'configs'
         

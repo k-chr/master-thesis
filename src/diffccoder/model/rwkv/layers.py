@@ -33,8 +33,8 @@ class RWKVTimeMix(t.jit.ScriptModule):
 
     def init_positional_weight_decay_vectors(self, config: RWKVConfig, layer_id: int, attn_sz: int):
         with t.no_grad(): # fancy init
-            ratio_0_to_1 = (layer_id / (config.n_layer - 1)) # 0 to 1
-            ratio_1_to_almost0 = (1.0 - (layer_id / config.n_layer)) # 1 to ~0
+            ratio_0_to_1 = (layer_id / (config.num_hidden_layers - 1)) # 0 to 1
+            ratio_1_to_almost0 = (1.0 - (layer_id / config.num_hidden_layers)) # 1 to ~0
             
             # fancy time_decay
             decay_speed = t.ones(attn_sz)
@@ -56,7 +56,6 @@ class RWKVTimeMix(t.jit.ScriptModule):
 
     @t.jit.script_method
     def attention(self, x):
-
         # Mix x with the previous timestep to produce xk, xv, xr
         xk, xv, xr = self.time_mix(x)
 
@@ -73,22 +72,24 @@ class RWKVTimeMix(t.jit.ScriptModule):
         k = self.key(xk)
         v = self.value(xv)
         r = self.receptance(xr)
+        
         return k, v, r
 
     def time_mix(self, x: t.Tensor) -> tuple[t.Tensor, t.Tensor, t.Tensor]:
-        xx = self.time_shift(x)
+        xx: t.Tensor = self.time_shift(x)
         xk = x * self.time_mix_k + xx * (1 - self.time_mix_k)
         xv = x * self.time_mix_v + xx * (1 - self.time_mix_v)
         xr = x * self.time_mix_r + xx * (1 - self.time_mix_r)
+        
         return xk, xv, xr
 
     def forward(self, x: t.Tensor) -> t.Tensor:
         B, T, C = x.size() # x = (Batch,Time,Channel)
-
         sr, k, v = self.attention(x)
 
         rwkv = sr * WKV(B, T, C, self.time_decay, self.time_first, k, v)
         rwkv = self.output(rwkv)
+        
         return rwkv
 
 
@@ -111,7 +112,7 @@ class RWKVChannelMix(t.jit.ScriptModule):
 
     def init_positional_weight_decay_vectors(self, config: RWKVConfig, layer_id: int):
         with t.no_grad(): # fancy init of time_mix
-            ratio_1_to_almost0 = (1.0 - (layer_id / config.n_layer)) # 1 to ~0
+            ratio_1_to_almost0 = (1.0 - (layer_id / config.num_hidden_layers)) # 1 to ~0
 
             x = t.ones(1, 1, config.embedding_size)
             for i in range(config.embedding_size):
@@ -122,6 +123,7 @@ class RWKVChannelMix(t.jit.ScriptModule):
 
     @t.jit.script_method
     def forward(self, x: t.Tensor) -> t.Tensor:
+        
         xx = self.time_shift(x)
         xk = x * self.channel_mix_k + xx * (1 - self.channel_mix_k)
         xr = x * self.channel_mix_r + xx * (1 - self.channel_mix_r)
@@ -165,6 +167,7 @@ class RWKVBlock(RWKVBlockBase):
         self.att = RWKVTimeMix(config, layer_id)
 
     def _attention(self, x: t.Tensor) -> t.Tensor:
+        
         return self.att(self.ln1(x))
     
 class RWKVFfnPreBlock(RWKVBlockBase):

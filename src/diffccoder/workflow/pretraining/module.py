@@ -15,17 +15,17 @@ from diffccoder.utils.warm_up_scheduler import WarmUpScheduler
 
 
 class PretrainingModule(LightningModule):
-    def __init__(self, optimization_config: OptimizationConfig, config: RWKVConfig) -> None:
+    def __init__(self, optimization_config: OptimizationConfig, config: RWKVConfig, skip_init: bool = False) -> None:
         super().__init__()
         self.config = optimization_config
-        self.model = GPT(config)
+        self.model = GPT(config, skip_init)
  
     def training_step(self, batch: t.Tensor, batch_idx: int) -> t.Tensor:
         loss, rwkv_out, y = self._process_batch(batch)
         self.log('train_loss', loss)
         self.log('train_perplexity', t.exp(loss))
         
-        return L2Wrap.apply(loss)
+        return L2Wrap.apply(loss, y)
 
     def validation_step(self, batch: t.Tensor, batch_idx: int) -> t.Tensor:
         loss, rwkv_out, y = self._process_batch(batch)
@@ -34,7 +34,7 @@ class PretrainingModule(LightningModule):
         return loss
     
     def _process_batch(self, batch: t.Tensor):
-        x, y = batch
+        index, x, y = batch
         rwkv_out: RWKVOutput = self.model(x)
 
         shift_x_hat = rwkv_out.logits[..., :-1, :].contiguous()
