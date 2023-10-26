@@ -97,7 +97,7 @@ class CreateOrCloneRunCommand(Command):
             logger.error(f'Experiment: {exp_name} should exist!!!')
             return -1
 
-    def _get_new_run_name(exp_name: str) -> str:
+    def _get_new_run_name(self, exp_name: str) -> str:
         runs_root = Path.home() / 'share' / 'exp' / exp_name / 'runs'
         number = 0
         if runs_root.is_dir():
@@ -111,6 +111,7 @@ class CreateOrCloneRunCommand(Command):
     def handle(self) -> int:
         
         exp_name = self.argument('experiment-name')
+        logger.debug(f'Exp: {exp_name}')
         run_name = self.argument('run-name') or self._get_new_run_name(exp_name)
         run_to_clone = self.argument('run-to-clone')
         
