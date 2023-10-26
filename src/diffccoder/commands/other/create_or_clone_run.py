@@ -99,14 +99,14 @@ class CreateOrCloneRunCommand(Command):
 
     def _get_new_run_name(exp_name: str) -> str:
         runs_root = Path.home() / 'share' / 'exp' / exp_name / 'runs'
+        number = 0
+        if runs_root.is_dir():
         
-        assert runs_root.is_dir()
-        
-        last_run = list(runs_root.iterdir())[-1]
-        
-        number = int(last_run.stem) + 1
-        
-        return str(number).zfill(6)        
+            last_run = list(runs_root.iterdir())[-1]
+
+            number = int(last_run.stem) + 1
+
+        return str(number).zfill(6)  
 
     def handle(self) -> int:
         

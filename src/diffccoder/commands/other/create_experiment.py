@@ -40,7 +40,7 @@ class CreateExperimentCommand(Command):
             self._setup_mlflow_exp(exp_name, exp_config, config_dir)
 
         if init_run:
-            self.call('create-or-clone-run', f'PLACEHOLDER {exp_name} 000000')
+            self.call('create-or-clone-run', f'PLACEHOLDER {exp_name}')
 
     def _setup_mlflow_exp(self, exp_name: str, exp_config: ExperimentConfig, config_dir: Path):
         logger.debug(f'Environmental variables: {os.environ}')
