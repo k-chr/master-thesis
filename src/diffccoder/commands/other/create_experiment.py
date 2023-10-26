@@ -37,7 +37,7 @@ class CreateExperimentCommand(Command):
         dump_config(exp_config, config_dir)
         
         if use_mlflow:
-            return self._setup_mlflow_exp(exp_name, exp_config, config_dir)
+            self._setup_mlflow_exp(exp_name, exp_config, config_dir)
 
         if init_run:
             self.call('create-or-clone-run', f'PLACEHOLDER {exp_name} 000000')
