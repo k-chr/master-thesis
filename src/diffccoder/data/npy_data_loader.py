@@ -20,6 +20,7 @@ class NPYDataModule(LightningDataModule):
                  num_workers: int | None = None,
                  batch_size: int = 1,
                  val_batch_size: int = 1) -> None:
+        super().__init__()
         self.root = in_dir
         self.npy_to_select = dir_list_txt
         self.val_ratio = split_val_ratio
