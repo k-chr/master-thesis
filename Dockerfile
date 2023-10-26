@@ -9,7 +9,7 @@ ADD . /master-thesis/
 
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && \
     apt-get update && \
-    apt-get -y -qq install sudo --no-install-recommends --no-install-suggests && \
+    apt-get -y -qq install git sudo --no-install-recommends --no-install-suggests && \
     sudo apt -y -qq install --reinstall software-properties-common --no-install-recommends --no-install-suggests && \
     sudo add-apt-repository ppa:deadsnakes/ppa && \
     sudo apt update --no-install-recommends --no-install-suggests && \
