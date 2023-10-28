@@ -16,7 +16,7 @@ class L2Wrap(Function):
         # to encourage the logits to be close to 0
         factor = 1e-4 / (y.shape[0] * y.shape[1])
         maxx, ids = t.max(y, -1, keepdim=True)
-        gy = t.zeros_like(y, dtype=t.float32)
+        gy = t.zeros_like(y)
         gy.scatter_(-1, ids, maxx * factor)
         return (grad_output, gy)
     

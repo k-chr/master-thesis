@@ -3,7 +3,6 @@ from pathlib import Path
 import dask.array as da
 from dask.array.core import Array
 from lightning.pytorch import LightningDataModule
-from lightning.pytorch.utilities.types import EVAL_DATALOADERS, TRAIN_DATALOADERS
 import numpy as np
 import torch as t
 from torch.utils.data import DataLoader, Dataset, random_split
@@ -50,7 +49,7 @@ class NPYDataModule(LightningDataModule):
     
     def setup(self, stage: str) -> None:
         if stage == "fit" or stage is None:
-            npy_all = NPYCLMDataset(self.root, self.npy_to_select)
+            npy_all = NPYCLMDataset(self.root, self.npy_to_select, precision=self.trainer.precision)
             self.npy_train, self.npy_val = random_split(npy_all, [1 - self.val_ratio, self.val_ratio])
 
         if stage == "test":
@@ -60,7 +59,7 @@ class NPYDataModule(LightningDataModule):
         return super().prepare_data()
     
 class NPYCLMDataset(Dataset):
-    def __init__(self, in_dir: Path, sub_dir_list_file: Path) -> None:
+    def __init__(self, in_dir: Path, sub_dir_list_file: Path, precision: t.dtype=t.float32) -> None:
         assert in_dir.is_dir(), f'Provided directory does not exist: {in_dir}'
         assert sub_dir_list_file.is_file(), f'Provided file does not exist: {sub_dir_list_file}'
         
@@ -69,7 +68,7 @@ class NPYCLMDataset(Dataset):
         mmaps: list[np.memmap] = [np.load(in_dir / npy_dir / 'data.npy', mmap_mode='r') for npy_dir in dir_list]
         
         self.mmap: Array = da.concatenate(mmaps)        
-            
+        self.precision = precision
         self.__len = self.mmap.shape[0] #shape is cached-property, so as a result it is 'tuple' not 'callable' in runtime
         
     def __len__(self):

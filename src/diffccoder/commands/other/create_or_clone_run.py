@@ -32,7 +32,7 @@ class CreateOrCloneRunCommand(Command):
         exp_config: ExperimentConfig = load_config(root_config_dir / 'experimentconfig.yaml')
         src_config_dir = exp_config.exp_root / 'runs' / src_run / 'configs'
         dst_config_dir = exp_config.exp_root / 'runs' / dst_run / 'configs'
-        
+        logger.debug(f'Copying from: {src_config_dir}, to: {dst_config_dir}.')
         dst_config_dir.mkdir(parents=True, exist_ok=True)
         
         src_config: ExperimentConfig = load_config(src_config_dir / 'experimentconfig.yaml')
@@ -117,7 +117,7 @@ class CreateOrCloneRunCommand(Command):
         
         if run_to_clone:
             assert run_name != run_to_clone
-            self._clone_run(exp_name, run_to_clone, run_name)
+            return self._clone_run(exp_name, run_to_clone, run_name)
         
         return self._create_run(exp_name, run_name)
     

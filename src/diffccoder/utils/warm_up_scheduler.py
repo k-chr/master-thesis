@@ -16,6 +16,7 @@ class WarmUpScheduler(LRScheduler):
     
     def __init__(self, 
                  scheduler_to_wrap: LRScheduler,
+                 get_metric: Callable[..., int | float],
                  warm_up_steps: int = 3e3,
                  warm_up_metric: WarmUpMetric = WarmUpMetric.GLOBAL_STEP,
                  warm_up_routine: WarmUpRoutine = WarmUpRoutine.LINEAR,
@@ -23,34 +24,34 @@ class WarmUpScheduler(LRScheduler):
                  k: float = math.e,
                  last_epoch: int = -1,
                  verbose: bool = False) -> None:
-        super().__init__(scheduler_to_wrap.optimizer, last_epoch, verbose)
         
         self.wrapped_scheduler = scheduler_to_wrap
         self.warm_up_metric_max = warm_up_steps
         self.warm_up_metric = warm_up_metric
         self.lr_0 = lr_0
         self.curr_metric_value = 0
-        
+        self.get_metric = get_metric
         assert k - LIMIT_K < EPS 
         
         self.k = k
         self.warm_up_routine = warm_up_routine
-        
+        print(f'warm_up_metric: {self.warm_up_metric}')
         self.setup_warm_up()
+        super().__init__(scheduler_to_wrap.optimizer, last_epoch, verbose)
         
     def __linear(self) -> Callable[[int, float], float]:
         a = {lr_base : (lr_base - self.lr_0) / self.warm_up_metric_max for lr_base in self.base_lrs}
         return lambda step, lr_base: step * a[lr_base] + self.lr_0
         
     def __sin(self) -> Callable[[int, float], float]:
-        return lambda step, lr_base: self.lr_0 + (lr_base - self.lr_0) * (1 - math.cos( math.pi * (step / self.warm_up_metric_max))) / 2
+        return lambda step, lr_base: self.lr_0 + (lr_base - self.lr_0) * (1 - math.cos( math.pi * ((step or 0) / self.warm_up_metric_max))) / 2
     
     def __log(self) -> Callable[[int, float], float]:
         a = {lr_base: (lr_base - self.lr_0) / math.log10(self.warm_up_metric_max + 1) for lr_base in self.base_lrs}
-        return lambda step, lr_base: a[lr_base] * math.log10(step + 1) + self.lr_0
+        return lambda step, lr_base: a[lr_base] * math.log10((step or 0) + 1) + self.lr_0
     
     def __exp(self) -> Callable[[int, float], float]:
-        return lambda step, lr_base: ((lr_base - self.lr_0) * (math.exp(self.k * step / self.warm_up_metric_max) - 1) / (math.exp(self.k) - 1)) + self.lr_0
+        return lambda step, lr_base: ((lr_base - self.lr_0) * (math.exp(self.k * (step or 0) / self.warm_up_metric_max) - 1) / (math.exp(self.k) - 1)) + self.lr_0
     
     def setup_warm_up(self):
         match self.warm_up_routine:
@@ -64,13 +65,11 @@ class WarmUpScheduler(LRScheduler):
                 self._warm_up_routine = self.__sin()
     
     def step(self, 
-             epoch: int | None = None,
-             global_steps: int | None = None,
-             tokens: int | None = None) -> None:
-        metric = self.__check_if_metric_exists(global_steps, tokens)
+             epoch: int | None = None) -> None:
+        metric = self.__check_if_metric_exists(self.get_metric(), None)
         self.curr_metric_value = metric
-        
-        if self.curr_metric_value >= self.warm_up_metric_max:
+        print(f'METRIC: {self.warm_up_metric}, VAL: {metric}')
+        if metric and self.curr_metric_value >= self.warm_up_metric_max:
             return self.wrapped_scheduler.step(epoch)
         
         return super().step(epoch)
@@ -80,24 +79,22 @@ class WarmUpScheduler(LRScheduler):
             warnings.warn('To get the last learning rate computed by the scheduler, '
                           'please use `get_last_lr()`.', UserWarning)
 
-        if self.curr_metric_value >= self.warm_up_metric_max:
+        if self.curr_metric_value is not None and self.curr_metric_value >= self.warm_up_metric_max:
             return self.wrapped_scheduler.get_lr()
         
-        return [self.warm_up_metric(self.curr_metric_value, base_lr) for base_lr in self.base_lrs]
+        return [self._warm_up_routine(self.curr_metric_value, base_lr) for base_lr in self.base_lrs]
 
     def __check_if_metric_exists(self, global_steps: int | None, tokens: int | None) -> int:
         match self.warm_up_metric:
             case WarmUpMetric.GLOBAL_STEP:
-                assert global_steps is not None
                 return global_steps
             case WarmUpMetric.TOKENS:
-                assert tokens is not None
                 return tokens
             case _:
                 assert False
     
     def state_dict(self) -> dict[str, Any]:
-        excl_keys = {'_warm_up_routine', 'optimizer', 'wrapped_scheduler'}
+        excl_keys = {'_warm_up_routine', 'optimizer', 'wrapped_scheduler', 'get_metric'}
         incl_keys = set(self.__dict__) - excl_keys
         state = {k: self.__dict__[k] for k in incl_keys}
         state['wrapped_scheduler'] = self.wrapped_scheduler.state_dict()

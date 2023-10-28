@@ -1,4 +1,5 @@
 from lightning import LightningModule
+from lightning.pytorch.callbacks import ModelCheckpoint
 import torch as t
 from torch.functional import F
 from torch.optim import Optimizer
@@ -15,6 +16,8 @@ from diffccoder.utils.warm_up_scheduler import WarmUpScheduler
 
 
 class PretrainingModule(LightningModule):
+    skip_validation_step: bool = False
+    q: list[tuple[ModelCheckpoint, int]] = []
     def __init__(self, optimization_config: OptimizationConfig, config: RWKVConfig, skip_init: bool = False) -> None:
         super().__init__()
         self.config = optimization_config
@@ -22,16 +25,37 @@ class PretrainingModule(LightningModule):
  
     def training_step(self, batch: t.Tensor, batch_idx: int) -> t.Tensor:
         loss, rwkv_out, y = self._process_batch(batch)
-        self.log('train_loss', loss)
-        self.log('train_perplexity', t.exp(loss))
+        self.log('train_loss', loss, on_step=True, prog_bar=True)
+        self.log('train_perplexity', t.exp(loss.mean()), on_step=True, prog_bar=True)
         
-        return L2Wrap.apply(loss, y)
+        return L2Wrap.apply(loss, y.to(self.device, self.dtype))
 
     def validation_step(self, batch: t.Tensor, batch_idx: int) -> t.Tensor:
         loss, rwkv_out, y = self._process_batch(batch)
-        self.log('validation_loss', loss)
-        self.log('validation_perplexity', t.exp(loss))
+        print(self.skip_validation_step, ': value of skip validation step')
+        
+        if not self.trainer.sanity_checking and not self.skip_validation_step:
+            self.__restore_checkpointers()
+            self.log('validation_loss', loss)
+            self.log('validation_perplexity', t.exp(loss.mean()))
+        elif self.skip_validation_step:
+            print('Stop checkpointers')
+            self.__stop_checkpointers()
+            
+            self.skip_validation_step = False
         return loss
+
+    def __restore_checkpointers(self):
+        while self.q:
+            c, k = self.q.pop()
+            c.save_top_k = k
+
+    def __stop_checkpointers(self):
+        model_checkpoints: list[ModelCheckpoint] = self.trainer.checkpoint_callbacks
+        for model_checkpointer in model_checkpoints:
+            if model_checkpointer.monitor in ['validation_loss', 'validation_perplexity']:
+                self.q.append((model_checkpointer, model_checkpointer.save_top_k))
+                model_checkpointer.save_top_k = 0
     
     def _process_batch(self, batch: t.Tensor):
         index, x, y = batch
@@ -108,7 +132,8 @@ class PretrainingModule(LightningModule):
                                             warm_up_metric=self.config.warmup_metric,
                                             warm_up_routine=self.config.warmup_routine,
                                             k=self.config.warmup_k,
-                                            lr_0=self.config.warmup_lr_0)
+                                            lr_0=self.config.warmup_lr_0,
+                                            get_metric=lambda: self.trainer.global_step)
                 
                 scheduler_aux_config = {'monitor': self.config.warmup_metric.name.lower(),
                                         'name': f'warmup_{self.config.warmup_scheduler.name.lower()}'}
@@ -166,7 +191,7 @@ class PretrainingModule(LightningModule):
                 ]
         else:
             optim_groups = [{"params": [params[n] for n in lr_1x], "weight_decay": 0.0, "my_lr_scale": 1.0}]
-
+        
         if self.config.weight_decay > 0:
             optim_groups += [{"params": [params[n] for n in lr_decay],
                               "weight_decay": self.config.weight_decay,

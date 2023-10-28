@@ -19,4 +19,3 @@ class ModelRunner(Trainer):
                          **asdict(trainer_config),
                          callbacks=callbacks,
                          logger=logger)
-        

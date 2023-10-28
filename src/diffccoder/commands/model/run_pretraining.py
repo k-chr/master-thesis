@@ -3,6 +3,7 @@ from pathlib import Path
 from cleo.commands.command import Command
 from cleo.helpers import argument
 from lightning.pytorch.loggers import MLFlowLogger, TensorBoardLogger
+from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor
 from loguru import logger
 import mlflow as mlflow_client
 
@@ -13,7 +14,6 @@ from diffccoder.configs.rwkv_config import RWKVConfig
 from diffccoder.configs.trainer_config import DebugTrainerConfig
 from diffccoder.data.npy_data_loader import NPYDataModule
 from diffccoder.workflow.model_runner import ModelRunner
-from diffccoder.workflow.mlflow_checkpointer import MLFlowModelCheckpoint
 from diffccoder.workflow.pretraining.module import PretrainingModule
 
 DEFAULT_RUN_NAME = 'Pre-Training'
@@ -46,6 +46,25 @@ class PreTrainingCommand(Command):
         
         _logger = []
         _callbacks = []
+        
+        last = ModelCheckpoint(dirpath=exp_config.work_dir / 'artifacts',
+                               save_top_k=0,
+                               save_last=True)
+            
+        _callbacks.append(last)
+            
+        for metric in exp_config.metrics_to_log:
+            monitor = ModelCheckpoint(dirpath=exp_config.work_dir / 'artifacts',
+                                      filename=f'best_on_{metric}',
+                                      save_top_k=1,
+                                      save_on_train_epoch_end=False,
+                                      monitor=f'validation_{metric}',
+                                      save_last=False)
+            _callbacks.append(monitor)
+
+        lr_monitor = LearningRateMonitor(logging_interval='step')
+        _callbacks.append(lr_monitor)
+        
         if exp_config.mlflow_enabled and exp_config.experiment_name:
             
             if not exp_config.mlflow_continue_run or exp_config.mlflow_run_id is None:
@@ -60,17 +79,6 @@ class PreTrainingCommand(Command):
                                   run_id=exp_config.mlflow_run_id,
                                   tracking_uri=exp_config.mlflow_server,
                                   artifact_location=exp_config.work_dir / 'artifacts')
-            
-            last = MLFlowModelCheckpoint(mlflow, dirpath=exp_config.work_dir / 'artifacts', save_top_k=0, save_last=True)
-            last.experiment.log_artifacts(mlflow.run_id, config_dir)
-            _callbacks.append(last)
-            
-            for metric in exp_config.metrics_to_log:
-                monitor = MLFlowModelCheckpoint(mlflow, dirpath=exp_config.work_dir / 'artifacts',
-                                                save_top_k=1,
-                                                monitor=metric,
-                                                save_last=False)
-                _callbacks.append(monitor)
             
             _logger.append(mlflow)
             
@@ -91,6 +99,7 @@ class PreTrainingCommand(Command):
         ckpt_path: Path = exp_config.work_dir / 'artifacts' / 'last.ckpt' if not exp_config.from_pretrained else exp_config.from_pretrained
         kwargs = {'ckpt_path':ckpt_path} if ckpt_path.is_file() else {}
         net_module = PretrainingModule(optim_cfg, rwkv_cfg, skip_init=bool(kwargs))
+        net_module.skip_validation_step = bool(kwargs)
         logger.info(f'Running on: {model_runner.accelerator}; Skipping initialization?: {bool(kwargs)}')
         model_runner.fit(net_module, datamodule=data_module, **kwargs)
     

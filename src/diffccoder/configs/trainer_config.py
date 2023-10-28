@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from pytorch_lightning.trainer.connectors.accelerator_connector import _PRECISION_INPUT
+from lightning.pytorch.trainer.connectors.accelerator_connector import _PRECISION_INPUT
 
 from diffccoder.configs.base import BaseConfig
 
