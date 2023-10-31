@@ -32,14 +32,12 @@ class PretrainingModule(LightningModule):
 
     def validation_step(self, batch: t.Tensor, batch_idx: int) -> t.Tensor:
         loss, rwkv_out, y = self._process_batch(batch)
-        print(self.skip_validation_step, ': value of skip validation step')
         
         if not self.trainer.sanity_checking and not self.skip_validation_step:
             self.__restore_checkpointers()
             self.log('validation_loss', loss)
             self.log('validation_perplexity', t.exp(loss.mean()))
         elif self.skip_validation_step:
-            print('Stop checkpointers')
             self.__stop_checkpointers()
             
             self.skip_validation_step = False

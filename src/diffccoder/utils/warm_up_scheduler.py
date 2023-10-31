@@ -35,7 +35,6 @@ class WarmUpScheduler(LRScheduler):
         
         self.k = k
         self.warm_up_routine = warm_up_routine
-        print(f'warm_up_metric: {self.warm_up_metric}')
         self.setup_warm_up()
         super().__init__(scheduler_to_wrap.optimizer, last_epoch, verbose)
         
@@ -68,7 +67,6 @@ class WarmUpScheduler(LRScheduler):
              epoch: int | None = None) -> None:
         metric = self.__check_if_metric_exists(self.get_metric(), None)
         self.curr_metric_value = metric
-        print(f'METRIC: {self.warm_up_metric}, VAL: {metric}')
         if metric and self.curr_metric_value >= self.warm_up_metric_max:
             return self.wrapped_scheduler.step(epoch)
         
