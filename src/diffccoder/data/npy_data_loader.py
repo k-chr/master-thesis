@@ -65,7 +65,7 @@ class NPYCLMDataset(Dataset):
         
         dir_list = get_dir_list_from_file(list_dir_path=sub_dir_list_file)
         
-        mmaps: list[np.memmap] = [np.load(in_dir / npy_dir / 'data.npy', mmap_mode='r') for npy_dir in dir_list]
+        mmaps: list[np.memmap] = [np.load(in_dir / npy_dir / 'data.npy', mmap_mode='r+') for npy_dir in dir_list]
         
         self.mmap: Array = da.concatenate(mmaps)        
         self.precision = precision
