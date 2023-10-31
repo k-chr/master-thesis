@@ -11,7 +11,7 @@ from diffccoder.configs.base import dump_config, load_config
 from diffccoder.configs.experiment_config import ExperimentConfig
 from diffccoder.configs.optimization_config import OptimizationConfig
 from diffccoder.configs.rwkv_config import RWKVConfig
-from diffccoder.configs.trainer_config import DebugTrainerConfig
+from diffccoder.configs.trainer_config import DebugTrainerConfig, TrainerConfig
 from diffccoder.data.npy_data_loader import NPYDataModule
 from diffccoder.workflow.model_runner import ModelRunner
 from diffccoder.workflow.pretraining.module import PretrainingModule
@@ -39,7 +39,7 @@ class PreTrainingCommand(Command):
                                     batch_size=exp_config.batch_size,
                                     val_batch_size=exp_config.val_batch_size)
         
-        trainer_cfg = load_config(config_dir / 'trainerconfig.yaml')      
+        trainer_cfg: TrainerConfig = load_config(config_dir / 'trainerconfig.yaml')      
         debug_cfg: DebugTrainerConfig = load_config(p) if (p := Path(config_dir / 'debugtrainerconfig.yaml')).is_file() else None
         optim_cfg: OptimizationConfig = load_config(config_dir / 'optimizationconfig.yaml')
         rwkv_cfg: RWKVConfig = load_config(config_dir / 'rwkvconfig.yaml')
@@ -49,7 +49,8 @@ class PreTrainingCommand(Command):
         
         last = ModelCheckpoint(dirpath=exp_config.work_dir / 'artifacts',
                                save_top_k=0,
-                               save_last=True)
+                               save_last=True,
+                               every_n_train_steps=trainer_cfg.log_every_n_steps)
             
         _callbacks.append(last)
             
