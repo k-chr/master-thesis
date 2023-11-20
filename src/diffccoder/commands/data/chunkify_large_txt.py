@@ -19,7 +19,7 @@ class ChunkifyLargeTextCommand(Command):
                       description='Number of lines to split [default: 16000].',
                       default='text',
                       flag=False),
-               option('name', 'n',
+               option('name', 'N',
                       description='Name of output txt file [default: data].',
                       default='data',
                       flag=False)]

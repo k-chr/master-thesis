@@ -3,6 +3,7 @@ from pathlib import Path
 from cleo.commands.command import Command
 from cleo.helpers import argument
 from loguru import logger
+from tokenizers import AddedToken
 from tokenizers.implementations import ByteLevelBPETokenizer
 
 from diffccoder.configs.base import load_config
@@ -48,13 +49,13 @@ class TrainTokenizerCommand(Command):
                                           unicode_normalizer=yaml_config.unicode_normalizer,
                                           end_of_word_suffix=yaml_config.end_of_word_suffix,
                                           trim_offsets=yaml_config.trim_offsets)
-
-        tokenizer.train_from_iterator(iterator=lazy_load(input_files, logger=logger),
+        
+        tokenizer.train_from_iterator(iterator=lazy_load(input_files),
                                       special_tokens=yaml_config.special_tokens,
                                       vocab_size=yaml_config.vocab_size,
                                       min_frequency=yaml_config.min_frequency,
                                       length=len(input_files))
-
+        tokenizer.add_tokens([AddedToken(" " * n) for n in range(2, 25)])
         logger.info(f'Saving result of BPE to: {out_file}')
         tokenizer.save(out_file.__str__())
         logger.success('All done!')

@@ -59,7 +59,7 @@ def get_ndarray_from_encoding(tokenizer: Tokenizer,
             assert len(chunk) == max_seq_len
             tensors += [chunk]
             
-    arr = np.asarray(tensors)
+    arr = np.asarray(tensors, dtype=np.int16)
     return arr
 
 def split_chunk(max_seq_len: int, chunk: list[int]) -> tuple[list[list[int]], list[int]]:
@@ -70,7 +70,7 @@ def split_chunk(max_seq_len: int, chunk: list[int]) -> tuple[list[list[int]], li
     return tensors, chunk
 
 def batch_encode(files: list[Path], tokenizer: Tokenizer):
-    for file, content in zip(files, lazy_load(files, True, logger)):
+    for file, content in zip(files, lazy_load(files, True)):
         yield file, tokenizer.encode_batch(content)
 
 

@@ -7,13 +7,22 @@ from torch.utils.cpp_extension import load
 from diffccoder.utils.rwkv_kernel_context import RWKVContext
 
 
-T_MAX = 1024 # increase this if your ctx_len is long [NOTE: TAKES LOTS OF VRAM!]
 # it's possible to go beyond CUDA limitations if you slice the ctx and pass the hidden state in each slice
 _kernels = Path(__file__).resolve().parent
+
+def cast(tensor: t.Tensor, dtype: t.dtype):
+    if tensor.dtype is dtype: return tensor
+    match dtype:
+        case t.bfloat16: return tensor.bfloat16()
+        case t.float16: return tensor.half()
+        case t.float32: return tensor.float()
+        case _: return tensor
 
 
 class WKV(Function):
     _wkv_cuda: Function = None
+    _dtype = t.float32
+    T_MAX = 1024 # increase this if your ctx_len is long [NOTE: TAKES LOTS OF VRAM!]
     
     @staticmethod
     def state(): 
@@ -21,9 +30,21 @@ class WKV(Function):
     
     @staticmethod
     def load():
-        WKV._wkv_cuda = load(name="wkv_cuda", sources=[ _kernels / "cuda/wkv_op.cpp", _kernels / "cuda/wkv_cuda.cu"],
-                verbose=True, extra_cuda_cflags=['-res-usage', '--maxrregcount 60', '--use_fast_math', '-O3', '-Xptxas -O3', f'-DTmax={T_MAX}'])
-    
+        flags = ['-res-usage',
+                 '--maxrregcount 60',
+                 '--use_fast_math',
+                 '-O3',
+                 '-Xptxas -O3',
+                 '--extra-device-vectorization',
+                 f'-DTmax={WKV.T_MAX}']
+        extra_flags = [] if WKV._dtype is not t.bfloat16 else ['-t 4', '-std=c++17']
+        op_fname = 'cuda/wkv_op' + ('' if WKV._dtype is not t.bfloat16 else 'bf16')
+        cuda_fname = 'cuda/wkv_cuda' + ('' if WKV._dtype is not t.bfloat16 else 'bf16')
+        WKV._wkv_cuda = load(name='wkv_cuda', 
+                             sources=[ _kernels / (op_fname + '.cpp'), _kernels /  (cuda_fname + '.cu')],
+                             verbose=True, 
+                             extra_cuda_cflags=extra_flags + flags)
+ 
     @staticmethod
     def forward(ctx: RWKVContext,
                 B: int,
@@ -36,36 +57,44 @@ class WKV(Function):
         ctx.B = B
         ctx.T = T
         ctx.C = C
-        assert T <= T_MAX
-        assert B * C % min(C, 1024) == 0
-        w = -t.exp(w.contiguous())
-        u = u.contiguous()
-        k = k.contiguous()
-        v = v.contiguous()
-        ctx.save_for_backward(w, u, k, v)
-        y = t.empty((B, T, C), device='cuda', memory_format=t.contiguous_format)
+        
+        assert T <= WKV.T_MAX
+        assert B * C % min(C, 32) == 0
+        
+        w = -t.exp(cast(w, t.float32).contiguous())
+        tensor_target_dtype = t.float32 if WKV._dtype != t.bfloat16 else t.bfloat16
+        u = cast(u, tensor_target_dtype).contiguous()
+        k = cast(k, tensor_target_dtype).contiguous()
+        v = cast(v, tensor_target_dtype).contiguous()
+        y = t.empty((B, T, C), device=w.device, memory_format=t.contiguous_format, dtype=tensor_target_dtype)
+        
         WKV._wkv_cuda.forward(B, T, C, w, u, k, v, y)
-        return y
+        
+        ctx.save_for_backward(w, u, k, v, y)
+        
+        return cast(y, WKV._dtype)
 
     @staticmethod
     def backward(ctx: RWKVContext, gy: t.Tensor):
         B = ctx.B
         T = ctx.T
         C = ctx.C
-        assert T <= T_MAX
-        assert B * C % min(C, 1024) == 0
-        w, u, k, v = ctx.saved_tensors
-        gw = t.zeros((B, C), device='cuda').contiguous()
-        gu = t.zeros((B, C), device='cuda').contiguous()
-        gk = t.zeros((B, T, C), device='cuda').contiguous()
-        gv = t.zeros((B, T, C), device='cuda').contiguous()
+        assert T <= WKV.T_MAX
+        assert B * C % min(C, 32) == 0
+        w, u, k, v, y = ctx.saved_tensors
+        dev = gy.device
+        tensor_target_dtype = t.float32 if WKV._dtype != t.bfloat16 else t.bfloat16
+        gw = t.empty((B, C), device=dev, dtype=tensor_target_dtype).contiguous()
+        gu = t.empty((B, C), device=dev, dtype=tensor_target_dtype).contiguous()
+        gk = t.empty((B, T, C), device=dev, dtype=tensor_target_dtype).contiguous()
+        gv = t.empty((B, T, C), device=dev, dtype=tensor_target_dtype).contiguous()
         
-        WKV._wkv_cuda.backward(B, T, C, w, u, k, v, gy.contiguous(), gw, gu, gk, gv)
+        WKV._wkv_cuda.backward(B, T, C, w, u, k, v, y, cast(gy, tensor_target_dtype).contiguous(), gw, gu, gk, gv)
         
         gw = t.sum(gw, dim=0)
         gu = t.sum(gu, dim=0)
         
-        return (None, None, None, gw, gu, gk, gv)
+        return (None, None, None, cast(gw, WKV._dtype), cast(gu, WKV._dtype), cast(gk, WKV._dtype), cast(gv, WKV._dtype))
 
 def WKV_CUDA(B: int,
              T: int,

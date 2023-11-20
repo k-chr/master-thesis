@@ -23,7 +23,7 @@ class ProcessSmallXMLCommand(Command):
                       description='Name of subdirectory in `out_dir` [default: xml_mixed_corpus]',
                       default='xml_mixed_corpus',
                       flag=False),
-               option('name', 'n',
+               option('name', 'N',
                       description='Name of output txt file [default: data].',
                       default='data',
                       flag=False),

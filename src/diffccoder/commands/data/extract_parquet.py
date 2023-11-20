@@ -6,6 +6,7 @@ from loguru import logger
 import pandas as pd
 from tqdm import tqdm
 
+
 class ExtractParquetCommand(Command):
     name = 'extract-parquet'
     description = 'extract_parquet.py - extracts parquet data to txt'
@@ -17,7 +18,7 @@ class ExtractParquetCommand(Command):
                       description='Column / scalar name, where text is stored in parquet file [default: text].',
                       default='text',
                       flag=False),
-               option('name', 'n',
+               option('name', 'N',
                       description='Name of output txt file [default: data].',
                       default='data',
                       flag=False)]
@@ -50,7 +51,7 @@ def extract_and_dump_text_scalar(path: Path,
         return s.replace('\n', ' ').replace('\r', ' ')
     text = d[scalar_name].transform(filter_new_line)
     _dir = out_dir / path.stem
-    _dir.mkdir(mode=777, exist_ok=True)
+    _dir.mkdir(exist_ok=True)
     out_without_ext = _dir / out_fn
     
     with open(out_without_ext.with_suffix('.txt'), 'w') as f:

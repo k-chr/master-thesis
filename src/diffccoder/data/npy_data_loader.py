@@ -29,24 +29,24 @@ class NPYDataModule(LightningDataModule):
         self.val_batch_size = val_batch_size
         self.prepare_data_per_node = False
         self.allow_zero_length_dataloader_with_multiple_devices = True
-        
+
     def train_dataloader(self) -> DataLoader:
         return DataLoader(self.npy_train,
                    shuffle=True,
                    num_workers=self.num_workers,
                    batch_size=self.batch_size,
                    pin_memory=self.use_pinned_mem)
-    
+
     def val_dataloader(self) -> DataLoader:
         return DataLoader(self.npy_val,
                    shuffle=False,
                    num_workers=self.num_workers,
                    batch_size=self.val_batch_size,
                    pin_memory=self.use_pinned_mem)
-    
+
     def test_dataloader(self) -> DataLoader:
         return super().test_dataloader()
-    
+
     def setup(self, stage: str) -> None:
         if stage == "fit" or stage is None:
             npy_all = NPYCLMDataset(self.root, self.npy_to_select, precision=self.trainer.precision)
@@ -54,31 +54,31 @@ class NPYDataModule(LightningDataModule):
 
         if stage == "test":
             assert False, 'Currently no test data'
-    
+
     def prepare_data(self) -> None:
         return super().prepare_data()
-    
+
+
 class NPYCLMDataset(Dataset):
     def __init__(self, in_dir: Path, sub_dir_list_file: Path, precision: t.dtype=t.float32) -> None:
         assert in_dir.is_dir(), f'Provided directory does not exist: {in_dir}'
         assert sub_dir_list_file.is_file(), f'Provided file does not exist: {sub_dir_list_file}'
-        
+
         dir_list = get_dir_list_from_file(list_dir_path=sub_dir_list_file)
-        
+
         mmaps: list[np.memmap] = [np.load(in_dir / npy_dir / 'data.npy', mmap_mode='r+') for npy_dir in dir_list]
-        
-        self.mmap: Array = da.concatenate(mmaps)        
+
+        self.mmap: Array = da.concatenate(mmaps)
         self.precision = precision
         self.__len = self.mmap.shape[0] #shape is cached-property, so as a result it is 'tuple' not 'callable' in runtime
-        
+
     def __len__(self):
         return self.__len
     
     def __getitem__(self, index) -> tuple[int, t.Tensor, t.Tensor]:
-        
+
         data: t.Tensor = t.from_numpy(self.mmap[index].compute())
-        
+
         x, y = data, data.clone()
-        
+
         return index, x, y
-        

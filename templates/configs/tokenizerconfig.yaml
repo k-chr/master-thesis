@@ -7,7 +7,7 @@
     merges: null
     min_frequency: 2
     special_tokens: !list [<|endoftext|>, <|padding|>]
-    trim_offsets: false
-    unicode_normalizer: null
+    trim_offsets: true
+    unicode_normalizer: "nfkc"
     vocab: null
-    vocab_size: 50000
+    vocab_size: 50254
