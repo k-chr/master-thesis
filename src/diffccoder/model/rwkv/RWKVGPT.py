@@ -59,14 +59,6 @@ class GPT(nn.Module):
     def get_ctx_len(self):
         return self.rwkv.context_length
 
-    def _init_weights(self, module):
-        if isinstance(module, (nn.Linear)):
-            module.weight.data.normal_(mean=0.0, std=0.01)
-        if isinstance(module, (nn.Embedding)):
-            module.weight.data.normal_(mean=0.0, std=1e-5)
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
-
     def forward(self, idx: t.Tensor) -> RWKVOutput:
         B, T = idx.size()
         assert T <= self.get_ctx_len(), "Cannot forward, because len(input) > model ctx_len."

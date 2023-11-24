@@ -1,5 +1,7 @@
+import os
 from pathlib import Path
 
+from loguru import logger
 import torch as t
 from torch.autograd.function import Function
 from torch.utils.cpp_extension import load
@@ -22,7 +24,7 @@ def cast(tensor: t.Tensor, dtype: t.dtype):
 class WKV(Function):
     _wkv_cuda: Function = None
     _dtype = t.float32
-    T_MAX = 1024 # increase this if your ctx_len is long [NOTE: TAKES LOTS OF VRAM!]
+    T_MAX = int(os.environ.get('CTX_LEN', '1024')) # increase this if your ctx_len is long [NOTE: TAKES LOTS OF VRAM!]
     
     @staticmethod
     def state(): 
@@ -30,6 +32,7 @@ class WKV(Function):
     
     @staticmethod
     def load():
+        logger.info(f'Loading WKV cuda-kernel for {WKV._dtype} and ctx len: {WKV.T_MAX}')
         flags = ['-res-usage',
                  '--maxrregcount 60',
                  '--use_fast_math',
@@ -96,7 +99,7 @@ class WKV(Function):
         
         return (None, None, None, cast(gw, WKV._dtype), cast(gu, WKV._dtype), cast(gk, WKV._dtype), cast(gv, WKV._dtype))
 
-def WKV_CUDA(B: int,
+def wkv_cuda(B: int,
              T: int,
              C: int,
              w: t.Tensor,

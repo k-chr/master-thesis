@@ -5,7 +5,7 @@ import torch as t
 from torch import nn
 
 from diffccoder.configs.rwkv_config import RWKVConfig
-from diffccoder.model.kernels.wkv import WKV_CUDA as WKV
+from diffccoder.model.kernels.wkv import wkv_cuda as wkv
 
 
 class RWKVTimeMix(t.jit.ScriptModule):
@@ -15,36 +15,36 @@ class RWKVTimeMix(t.jit.ScriptModule):
         self.context_length = config.context_length
         self.embedding_size = config.embedding_size
 
-        attn_sz = config.embedding_size
+        attn_size = config.embedding_size
 
-        self.init_positional_weight_decay_vectors(config, layer_id, attn_sz)
+        self.init_positional_weight_decay_vectors(config, layer_id, attn_size)
             
         self.time_shift = nn.ZeroPad2d((0, 0, 1, -1))
 
-        self.key = nn.Linear(config.embedding_size, attn_sz, bias=False)
-        self.value = nn.Linear(config.embedding_size, attn_sz, bias=False)
-        self.receptance = nn.Linear(config.embedding_size, attn_sz, bias=False)
+        self.key = nn.Linear(config.embedding_size, attn_size, bias=False)
+        self.value = nn.Linear(config.embedding_size, attn_size, bias=False)
+        self.receptance = nn.Linear(config.embedding_size, attn_size, bias=False)
 
-        self.output = nn.Linear(attn_sz, config.embedding_size, bias=False)
+        self.output = nn.Linear(attn_size, config.embedding_size, bias=False)
 
         self.key.scale_init = 0
         self.receptance.scale_init = 0
         self.output.scale_init = 0
 
-    def init_positional_weight_decay_vectors(self, config: RWKVConfig, layer_id: int, attn_sz: int):
+    def init_positional_weight_decay_vectors(self, config: RWKVConfig, layer_id: int, attn_size: int):
         with t.no_grad(): # fancy init
             ratio_0_to_1 = (layer_id / (config.num_hidden_layers - 1)) # 0 to 1
             ratio_1_to_almost0 = (1.0 - (layer_id / config.num_hidden_layers)) # 1 to ~0
             
             # fancy time_decay
-            decay_speed = t.ones(attn_sz)
-            for h in range(attn_sz):
-                decay_speed[h] = -5 + 8 * (h / (attn_sz-1)) ** (0.7 + 1.3 * ratio_0_to_1)
+            decay_speed = t.ones(attn_size)
+            for h in range(attn_size):
+                decay_speed[h] = -5 + 8 * (h / (attn_size-1)) ** (0.7 + 1.3 * ratio_0_to_1)
             self.time_decay = nn.Parameter(decay_speed)
 
             # fancy time_first
-            zigzag = (t.tensor([(i+1)%3 - 1 for i in range(attn_sz)]) * 0.5)
-            self.time_first = nn.Parameter(t.ones(attn_sz) * math.log(0.3) + zigzag)
+            zigzag = (t.tensor([(i+1)%3 - 1 for i in range(attn_size)]) * 0.5)
+            self.time_first = nn.Parameter(t.ones(attn_size) * math.log(0.3) + zigzag)
             
             # fancy time_mix
             x = t.ones(1, 1, config.embedding_size)
@@ -87,7 +87,7 @@ class RWKVTimeMix(t.jit.ScriptModule):
         B, T, C = x.size() # x = (Batch,Time,Channel)
         sr, k, v = self.attention(x)
 
-        rwkv = sr * WKV(B, T, C, self.time_decay, self.time_first, k, v)
+        rwkv = sr * wkv(B, T, C, self.time_decay, self.time_first, k, v)
         rwkv = self.output(rwkv)
         
         return rwkv
@@ -102,10 +102,10 @@ class RWKVChannelMix(t.jit.ScriptModule):
 
         self.init_positional_weight_decay_vectors(config, layer_id)
 
-        hidden_sz = 4 * config.embedding_size
-        self.key = nn.Linear(config.embedding_size, hidden_sz, bias=False)
+        hidden_size = 4 * config.embedding_size
+        self.key = nn.Linear(config.embedding_size, hidden_size, bias=False)
         self.receptance = nn.Linear(config.embedding_size, config.embedding_size, bias=False)
-        self.value = nn.Linear(hidden_sz, config.embedding_size, bias=False)
+        self.value = nn.Linear(hidden_size, config.embedding_size, bias=False)
 
         self.value.scale_init = 0
         self.receptance.scale_init = 0

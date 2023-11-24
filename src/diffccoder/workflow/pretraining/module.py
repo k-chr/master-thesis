@@ -1,3 +1,5 @@
+import os
+
 from lightning import LightningModule
 from lightning.pytorch.callbacks import ModelCheckpoint
 import torch as t
@@ -22,7 +24,8 @@ class PretrainingModule(LightningModule):
         super().__init__()
         self.config = optimization_config
         self.model = GPT(config, skip_init)
- 
+        os.environ['CTX_LEN'] = str(config.context_length)
+        
     def training_step(self, batch: t.Tensor, batch_idx: int) -> t.Tensor:
         loss, rwkv_out, y = self._process_batch(batch)
         self.log('train_loss', loss, on_step=True, prog_bar=True)
@@ -109,35 +112,38 @@ class PretrainingModule(LightningModule):
                 
                 scheduler_aux_config = {'name': 'cosine'}
             case LRSchedulerType.WARMUP:
-                match self.config.warmup_scheduler:
-                    case LRSchedulerType.STEP:
-                        to_wrap = StepLR(optimizer=optimizer, 
-                                         step_size=self.config.lr_decay_step_size,
-                                         gamma=self.config.lr_decay_rate)
-                    case LRSchedulerType.COSINE:
-                        to_wrap = EhnancedCosineSchedulerLR(optimizer=optimizer,
-                                                            t_0=self.config.cos_t0,
-                                                            eta_min=self.config.cos_eta_min,
-                                                            lr_decay=self.config.lr_decay_rate,
-                                                            t_decay=self.config.cos_t_decay,
-                                                            lr_lowest_bound_ratio=self.config.cos_lb_ratio,
-                                                            warm_restarts=self.config.cos_warm_restarts)
-                    case _:
-                        raise ValueError(f'Unknown scheduler: {self.config.warmup_scheduler}')
-
-                scheduler = WarmUpScheduler(scheduler_to_wrap=to_wrap,
-                                            warm_up_steps=self.config.warmup_max,
-                                            warm_up_metric=self.config.warmup_metric,
-                                            warm_up_routine=self.config.warmup_routine,
-                                            k=self.config.warmup_k,
-                                            lr_0=self.config.warmup_lr_0,
-                                            get_metric=lambda: self.trainer.global_step)
+                scheduler = self._configure_warmup(optimizer)
                 
                 scheduler_aux_config = {'monitor': self.config.warmup_metric.name.lower(),
                                         'name': f'warmup_{self.config.warmup_scheduler.name.lower()}'}
             case _:
                 scheduler = None
         return scheduler_aux_config,scheduler
+
+    def _configure_warmup(self, optimizer):
+        match self.config.warmup_scheduler:
+            case LRSchedulerType.STEP:
+                to_wrap = StepLR(optimizer=optimizer, 
+                                         step_size=self.config.lr_decay_step_size,
+                                         gamma=self.config.lr_decay_rate)
+            case LRSchedulerType.COSINE:
+                to_wrap = EhnancedCosineSchedulerLR(optimizer=optimizer,
+                                                            t_0=self.config.cos_t0,
+                                                            eta_min=self.config.cos_eta_min,
+                                                            lr_decay=self.config.lr_decay_rate,
+                                                            t_decay=self.config.cos_t_decay,
+                                                            lr_lowest_bound_ratio=self.config.cos_lb_ratio,
+                                                            warm_restarts=self.config.cos_warm_restarts)
+            case _:
+                raise ValueError(f'Unknown scheduler: {self.config.warmup_scheduler}')
+
+        return WarmUpScheduler(scheduler_to_wrap=to_wrap,
+                                            warm_up_steps=self.config.warmup_max,
+                                            warm_up_metric=self.config.warmup_metric,
+                                            warm_up_routine=self.config.warmup_routine,
+                                            k=self.config.warmup_k,
+                                            lr_0=self.config.warmup_lr_0,
+                                            get_metric=lambda: self.trainer.global_step)
 
     def __configure_optimizer(self, optim_groups) -> Optimizer:
         match self.config.optimizer:
