@@ -24,15 +24,17 @@ class PreTrainingCommand(Command):
     name = 'run-pretraining'
     description = 'run_pretraining.py - Runs RWKV model on pre-training scenario.'
     arguments = [argument('pretraining-yaml',
-                          description='Path to pretraining configuration.')]
+                          description='Path to pretraining configuration.'),
+                 argument('pre-train-dirlist.txt',
+                          description='Path to file with directory list to include during training')]
     
     def handle(self) -> int:
         exp_config_path = Path(self.argument('pretraining-yaml'))
         exp_config: ExperimentConfig = load_config(exp_config_path)
         config_dir = exp_config.work_dir / 'configs'
-        
+        dirlist_txt = Path(self.argument('pre-train-dirlist.txt'))
         data_module = NPYDataModule(in_dir=exp_config.data_dir,
-                                    dir_list_txt=config_dir / 'pre-train_dir_list.txt',
+                                    dir_list_txt=dirlist_txt,
                                     split_val_ratio=exp_config.split_val_ratio,
                                     use_pinned_memory=exp_config.pin_memory,
                                     num_workers=exp_config.number_of_workers,
