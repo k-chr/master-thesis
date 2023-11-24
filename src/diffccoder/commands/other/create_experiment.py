@@ -34,6 +34,7 @@ class CreateExperimentCommand(Command):
             self.call('generate-template-yamls', f'PLACEHOLDER {config_dir.__str__()}')        
             
         else:
+            logger.info(f'Copying default templates from {copy_templates}.')
             shutil.copytree(src=Path(copy_templates), dst=config_dir, dirs_exist_ok=True)
             
         exp_config: ExperimentConfig = load_config(config_dir / 'experimentconfig.yaml')
@@ -74,5 +75,5 @@ class CreateExperimentCommand(Command):
     def handle(self) -> int:
         
         exp_name = self.argument('experiment-name')
-        return self._create_exp(exp_name, self.option('mlflow'), self.option('init-run'), self.option('copy-tempaltes'))
+        return self._create_exp(exp_name, self.option('mlflow'), self.option('init-run'), self.option('copy-templates'))
     
