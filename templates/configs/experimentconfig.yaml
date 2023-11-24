@@ -8,6 +8,7 @@
     metrics_to_log: !list [loss, perplexity]
     mlflow_continue_run: true
     mlflow_enabled: true
+    mlflow_http_timeout: 120
     mlflow_run_id: null
     mlflow_run_name: null
     mlflow_server: https://united-namely-macaw.ngrok-free.app
