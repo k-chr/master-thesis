@@ -3,22 +3,22 @@
     adam_eps: 1.0e-08
     adam_fused: false
     cos_eta_min: null
-    cos_lb_ratio: 0.25
+    cos_lb_ratio: 0.5
     cos_t0: 500
     cos_t_decay: 1.15
-    cos_warm_restarts: true
+    cos_warm_restarts: false
     layerwise_lr: false
-    lr_base: 0.01
+    lr_base: 0.001
     lr_decay_rate: 0.985
     lr_decay_step_size: 500
     lr_scheduler: !LRSchedulerType
-        value: cosine
+        value: warmup
     optimizer: !OptimizerType
         value: adam
     sgd_momentum: 0.95
     warmup_k: 2.718281828459045
-    warmup_lr_0: 0.0
-    warmup_max: 5000
+    warmup_lr_0: 0.000001
+    warmup_max: 1000
     warmup_metric: !WarmUpMetric
         value: global_step
     warmup_routine: !WarmUpRoutine

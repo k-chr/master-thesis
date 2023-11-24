@@ -1,18 +1,18 @@
 !TrainerConfig
     accelerator: auto
-    accumulate_grad_batches: 1
+    accumulate_grad_batches: 4
     check_val_every_n_epoch: 1
     default_root_dir: null
     deterministic: null
     devices: auto
     enable_checkpointing: null
-    enable_model_summary: null
-    enable_progress_bar: null
-    gradient_clip_algorithm: null
-    gradient_clip_val: null
+    enable_model_summary: true
+    enable_progress_bar: true
+    gradient_clip_algorithm: norm
+    gradient_clip_val: 5
     inference_mode: true
-    log_every_n_steps: null
+    log_every_n_steps: 100
     max_steps: -1
     num_nodes: 1
-    precision: 32-true
+    precision: bf16
     val_check_interval: null

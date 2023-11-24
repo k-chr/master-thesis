@@ -1,5 +1,5 @@
 !ExperimentConfig
-    batch_size: 128
+    batch_size: 64
     checkpoint_dir: null
     data_dir: null
     exp_root: !Path
@@ -8,15 +8,15 @@
     metrics_to_log: !list [loss, perplexity]
     mlflow_continue_run: true
     mlflow_enabled: true
-    mlflow_http_timeout: 120
+    mlflow_http_timeout: 600
     mlflow_run_id: null
     mlflow_run_name: null
     mlflow_server: https://united-namely-macaw.ngrok-free.app
-    number_of_workers: 1
+    number_of_workers: 8
     out_dir: null
     pin_memory: true
-    split_val_ratio: 0.2
+    split_val_ratio: 0.0002
     tensorboard: null
     use_tensorboard: false
-    val_batch_size: 32
+    val_batch_size: 10
     work_dir: null
