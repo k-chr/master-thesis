@@ -1,3 +1,4 @@
+import gc
 import math
 
 from loguru import logger
@@ -49,16 +50,13 @@ def RWKV_Init(model: nn.Module, args: RWKVConfig):  # fancy initialization of al
             if hasattr(m, "scale_init"):
                 scale = m.scale_init
 
-            # print(f"{str(shape[0]).ljust(5)} {str(shape[1]).ljust(5)} {str(scale).ljust(4)} {name}")
-
             gain *= scale
-            if scale == -999:
-                nn.init.eye_(ww)
-            elif gain == 0:
+            if gain == 0:
                 # zero init is great for some RWKV matrices
                 nn.init.zeros_(ww)
             elif gain > 0:
                 nn.init.orthogonal_(ww, gain=gain)
             else:
                 nn.init.normal_(ww, mean=0.0, std=-scale)
-                
+    gc.collect()
+    t.cuda.empty_cache()
