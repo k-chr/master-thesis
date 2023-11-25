@@ -59,8 +59,8 @@ class WKV(Function):
                  '--extra-device-vectorization',
                  f'-DTmax={WKV.T_MAX}']
         extra_flags = [] if WKV._dtype is not t.bfloat16 else ['-t 4', '-std=c++17']
-        op_fname = 'cuda/wkv_op' + ('' if WKV._dtype is not t.bfloat16 else 'bf16')
-        cuda_fname = 'cuda/wkv_cuda' + ('' if WKV._dtype is not t.bfloat16 else 'bf16')
+        op_fname = 'cuda/wkv_op' + ('' if WKV._dtype is not t.bfloat16 else '_bf16')
+        cuda_fname = 'cuda/wkv_cuda' + ('' if WKV._dtype is not t.bfloat16 else '_bf16')
         WKV._wkv_cuda = load(name='wkv_cuda', 
                              sources=[ _kernels / (op_fname + '.cpp'), _kernels /  (cuda_fname + '.cu')],
                              verbose=True, 
