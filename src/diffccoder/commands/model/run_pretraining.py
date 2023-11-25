@@ -72,7 +72,7 @@ class PreTrainingCommand(Command):
             
             if exp_config.mlflow_http_timeout != 120:
                 import os
-                os.environ['MLFLOW_HTTP_REQUEST_TIMEOUT'] = exp_config.mlflow_http_timeout
+                os.environ['MLFLOW_HTTP_REQUEST_TIMEOUT'] = str(exp_config.mlflow_http_timeout)
             
             if not exp_config.mlflow_continue_run or exp_config.mlflow_run_id is None:
             
