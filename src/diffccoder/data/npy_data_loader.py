@@ -77,7 +77,7 @@ class NPYCLMDataset(Dataset):
     
     def __getitem__(self, index) -> tuple[int, t.Tensor, t.Tensor]:
         arr: np.ndarray = self.mmap[index].compute()
-        data: t.Tensor = t.from_numpy(arr.astype(np.uint16))
+        data: t.Tensor = t.from_numpy(arr.astype(np.uint16).astype(np.int32))
 
         x, y = data, data.clone()
 
