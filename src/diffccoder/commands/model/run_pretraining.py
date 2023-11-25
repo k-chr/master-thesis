@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from cleo.commands.command import Command
@@ -48,6 +49,8 @@ class PreTrainingCommand(Command):
         
         _logger = []
         _callbacks = []
+        
+        os.environ['DTYPE'] = str(trainer_cfg.precision)
         
         last = ModelCheckpoint(dirpath=exp_config.work_dir / 'artifacts',
                                save_top_k=0,

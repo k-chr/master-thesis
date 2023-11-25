@@ -23,8 +23,9 @@ class PretrainingModule(LightningModule):
     def __init__(self, optimization_config: OptimizationConfig, config: RWKVConfig, skip_init: bool = False) -> None:
         super().__init__()
         self.config = optimization_config
-        self.model = GPT(config, skip_init)
         os.environ['CTX_LEN'] = str(config.context_length)
+        
+        self.model = GPT(config, skip_init)
         
     def training_step(self, batch: t.Tensor, batch_idx: int) -> t.Tensor:
         loss, rwkv_out, y = self._process_batch(batch)

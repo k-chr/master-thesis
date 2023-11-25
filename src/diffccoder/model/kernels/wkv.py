@@ -1,3 +1,4 @@
+from functools import lru_cache
 import os
 from pathlib import Path
 
@@ -23,9 +24,26 @@ def cast(tensor: t.Tensor, dtype: t.dtype):
 
 class WKV(Function):
     _wkv_cuda: Function = None
-    _dtype = t.float32
-    T_MAX = int(os.environ.get('CTX_LEN', '1024')) # increase this if your ctx_len is long [NOTE: TAKES LOTS OF VRAM!]
     
+    @classmethod
+    @property
+    def T_MAX(cls):
+        # increase this if your ctx_len is long [NOTE: TAKES LOTS OF VRAM!]
+        return int(os.environ.get('CTX_LEN', '1024'))
+    
+    @classmethod
+    @property
+    def _dtype(cls):
+        precision = os.environ.get('DTYPE', '32-true')
+        return WKV._get_dtype(precision)
+     
+    @staticmethod
+    @lru_cache
+    def _get_dtype(str_type: str):
+        if '32' in str_type: return t.float32
+        elif 'bf16' in str_type: return t.bfloat16
+        else: return t.float16        
+        
     @staticmethod
     def state(): 
         return WKV._wkv_cuda is not None
