@@ -32,7 +32,7 @@ class PretrainingModule(LightningModule):
         self.log('train_loss', loss, on_step=True, prog_bar=True)
         self.log('train_perplexity', t.exp(loss.mean()), on_step=True, prog_bar=True)
         
-        return L2Wrap.apply(loss, y.to(self.device, self.dtype))
+        return L2Wrap.apply(loss, y.to(self.dtype))
 
     def validation_step(self, batch: t.Tensor, batch_idx: int) -> t.Tensor:
         loss, rwkv_out, y = self._process_batch(batch)
@@ -61,6 +61,7 @@ class PretrainingModule(LightningModule):
     
     def _process_batch(self, batch: t.Tensor):
         index, x, y = batch
+        y = y.to(t.int64)
         rwkv_out: RWKVOutput = self.model(x)
 
         shift_x_hat = rwkv_out.logits[..., :-1, :].contiguous()

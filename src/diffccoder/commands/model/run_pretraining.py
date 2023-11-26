@@ -3,7 +3,7 @@ from pathlib import Path
 
 from cleo.commands.command import Command
 from cleo.helpers import argument
-from lightning.pytorch.loggers import MLFlowLogger, TensorBoardLogger
+from lightning.pytorch.loggers import MLFlowLogger, TensorBoardLogger, CSVLogger
 from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor
 from loguru import logger
 import mlflow as mlflow_client
@@ -100,6 +100,12 @@ class PreTrainingCommand(Command):
                                             name=exp_config.experiment_name)
             _logger.append(tensorboard)
 
+        if not _logger:
+            csv_logger = CSVLogger(save_dir=exp_config.work_dir / 'csvlogs',
+                                   name=exp_config.experiment_name,
+                                   flush_logs_every_n_steps=trainer_cfg.log_every_n_steps**2)
+            _logger.append(csv_logger)
+        
         model_runner = ModelRunner(trainer_config=trainer_cfg,
                                 debug_config=debug_cfg,
                                 logger=_logger,

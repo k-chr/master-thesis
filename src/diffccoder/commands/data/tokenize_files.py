@@ -1,4 +1,6 @@
+from functools import partial
 import gc
+from itertools import islice
 from typing import Any, Generator
 from pathlib import Path
 
@@ -31,7 +33,6 @@ def save_encoded(tokenizer: Tokenizer,
         np.save(npz_path, arr)
         logger.success(f'Successfully written {arr.size} elements to {npz_path}')
         del arr
-        del encoded_content
         gc.collect()
 
 def get_ndarray_from_encoding(tokenizer: Tokenizer,
@@ -40,33 +41,38 @@ def get_ndarray_from_encoding(tokenizer: Tokenizer,
     chunk = []
     tensors: list[list[int]] = []
     assert max_seq_len > 0
-    for line in tqdm(encoded_content):
-        tensor: list[int] = line.ids + [tokenizer.token_to_id('<|endoftext|>')]
-        chunk += tensor
-        if len(chunk) > max_seq_len:
-            tensor, chunk = split_chunk(max_seq_len, chunk)
-            tensors += tensor
+    collect_max = 1000
+    line_id = 0
+    total = len(encoded_content)
+    with tqdm(total=total) as pbar:
+        while encoded_content:
+            line = encoded_content.pop()
+            tensor: list[int] = line.ids + [tokenizer.token_to_id('<|endoftext|>')]
+            chunk += tensor
+            pbar.update()
+            del line
+            if (line_id + 1) % (min(line_id + collect_max, total)) == 0:
+                gc.collect()
+            line_id += 1
+            
+
+    if len(chunk) > max_seq_len:
+        tensors, chunk = split_chunk(max_seq_len, chunk)
         
     if len(chunk) > 0:
-        if len(chunk) > max_seq_len:
-            last_tensors, chunk = split_chunk(max_seq_len, chunk)
-            tensors += last_tensors
-            
-        if len(chunk) > 0:
-            
-            logger.info(f'Adding padding to sequence: {(max_seq_len - len(chunk))} padding tokens')
-            chunk += [tokenizer.token_to_id('<|padding|>')] * (max_seq_len - len(chunk))
-            assert len(chunk) == max_seq_len
-            tensors += [chunk]
-            
+        
+        logger.info(f'Adding padding to sequence: {(max_seq_len - len(chunk))} padding tokens')
+        chunk += tuple([tokenizer.token_to_id('<|padding|>')]) * (max_seq_len - len(chunk))
+        assert len(chunk) == max_seq_len
+        tensors += [chunk]
+        
     arr = np.asarray(tensors, dtype=np.int16)
     return arr
 
 def split_chunk(max_seq_len: int, chunk: list[int]) -> tuple[list[list[int]], list[int]]:
-    tensors = []
-    while len(chunk) > max_seq_len:
-        tensor, chunk = (chunk[:max_seq_len], chunk[max_seq_len:])
-        tensors += [tensor]
+    split = list(iter(partial(lambda it: tuple(islice(it, max_seq_len)), iter(chunk)), ()))
+    tensors, chunk = split[:-1], split[-1]
+    
     return tensors, chunk
 
 def batch_encode(files: list[Path], tokenizer: Tokenizer):
