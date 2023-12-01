@@ -19,7 +19,12 @@ class WarmUpMetric(Enum):
     
 class OptimizerType(Enum):
     ADAM = auto()
+    ADAM_8 = auto()
     SGD = auto()
+    ADAM_W_8 = auto()
+    ADAM_W = auto()
+    ADA_GRAD = auto()
+    ADA_GRAD_8 = auto()
     
 __enums__: Final[Enum]= [
     LRSchedulerType,

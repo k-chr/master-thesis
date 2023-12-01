@@ -1,11 +1,14 @@
 import os
 
+from bitsandbytes.optim import AdamW8bit, Adagrad8bit, Adam8bit
 from lightning import LightningModule
 from lightning.pytorch.callbacks import ModelCheckpoint
 import torch as t
 from torch.functional import F
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler, StepLR
+from transformers import RwkvForCausalLM, RwkvConfig
+from transformers.models.rwkv.modeling_rwkv import RwkvCausalLMOutput
 
 from diffccoder.configs.enums import LRSchedulerType, OptimizerType
 from diffccoder.configs.optimization_config import OptimizationConfig
@@ -17,20 +20,36 @@ from diffccoder.utils.lr_scheduler import EhnancedCosineSchedulerLR
 from diffccoder.utils.warm_up_scheduler import WarmUpScheduler
 
 
+def map_configs(cfg: RWKVConfig) -> RwkvConfig:
+    return RwkvConfig(vocab_size=cfg.vocab_size,
+                      context_length=cfg.context_length,
+                      hidden_size=cfg.embedding_size,
+                      num_hidden_layers=cfg.num_hidden_layers,
+                      attention_hidden_size=cfg.attention_hidden_size,
+                      intermediate_size=cfg.qk_attention)
+
+
 class PretrainingModule(LightningModule):
     skip_validation_step: bool = False
-    q: list[tuple[ModelCheckpoint, int]] = []
+    q: dict[str,list[tuple[ModelCheckpoint, int]]] = {'training':[], 'validation':[]}
     def __init__(self, optimization_config: OptimizationConfig, config: RWKVConfig, skip_init: bool = False) -> None:
         super().__init__()
         self.config = optimization_config
+        self.model_config = config
         os.environ['CTX_LEN'] = str(config.context_length)
-        
-        self.model = GPT(config, skip_init)
+        self.__skip_one_step = skip_init
+        self.model = GPT(config, skip_init) if not config.use_hugginface else RwkvForCausalLM(map_configs(config))
         
     def training_step(self, batch: t.Tensor, batch_idx: int) -> t.Tensor:
         loss, rwkv_out, y = self._process_batch(batch)
-        self.log('train_loss', loss, on_step=True, prog_bar=True)
-        self.log('train_perplexity', t.exp(loss.mean()), on_step=True, prog_bar=True)
+        
+        if self.__skip_one_step:
+            self.__skip_one_step = False
+            self.__stop_checkpointers('training')
+        else:
+            self.__restore_checkpointers('training')
+            self.log('train_loss', loss, on_step=True, prog_bar=True)
+            self.log('train_perplexity', t.exp(loss.mean()), on_step=True, prog_bar=True)
         
         return L2Wrap.apply(loss, y.to(self.dtype))
 
@@ -47,22 +66,22 @@ class PretrainingModule(LightningModule):
             self.skip_validation_step = False
         return loss
 
-    def __restore_checkpointers(self):
-        while self.q:
-            c, k = self.q.pop()
+    def __restore_checkpointers(self, mode='validation'):
+        while self.q[mode]:
+            c, k = self.q[mode].pop()
             c.save_top_k = k
 
-    def __stop_checkpointers(self):
+    def __stop_checkpointers(self, mode='validation'):
         model_checkpoints: list[ModelCheckpoint] = self.trainer.checkpoint_callbacks
         for model_checkpointer in model_checkpoints:
-            if model_checkpointer.monitor in ['validation_loss', 'validation_perplexity']:
-                self.q.append((model_checkpointer, model_checkpointer.save_top_k))
+            if model_checkpointer.monitor in [f'{mode}_loss', f'{mode}_perplexity']:
+                self.q[mode].append((model_checkpointer, model_checkpointer.save_top_k))
                 model_checkpointer.save_top_k = 0
     
     def _process_batch(self, batch: t.Tensor):
         index, x, y = batch
         y = y.to(t.int64)
-        rwkv_out: RWKVOutput = self.model(x)
+        rwkv_out: RWKVOutput | RwkvCausalLMOutput = self.model(x)
 
         shift_x_hat = rwkv_out.logits[..., :-1, :].contiguous()
         shift_y = y[..., 1:].contiguous()
@@ -155,10 +174,34 @@ class PretrainingModule(LightningModule):
                                          eps=self.config.adam_eps,
                                          betas=self.config.adam_betas,
                                          fused=self.config.adam_fused)
+            case OptimizerType.ADAM_8:
+                optimizer = Adam8bit(params=optim_groups,
+                                     lr=self.config.lr_base,
+                                     eps=self.config.adam_eps,
+                                     betas=self.config.adam_betas)
             case OptimizerType.SGD:
                 optimizer = t.optim.SGD(params=optim_groups,
                                         lr=self.config.lr_base,
-                                        momentum=self.config.sgd_momentum)          
+                                        momentum=self.config.sgd_momentum)
+            case OptimizerType.ADAM_W:
+                optimizer = t.optim.AdamW(params=optim_groups,
+                                         lr=self.config.lr_base,
+                                         eps=self.config.adam_eps,
+                                         betas=self.config.adam_betas,
+                                         fused=self.config.adam_fused)
+            case OptimizerType.ADAM_W_8:
+                optimizer = AdamW8bit(params=optim_groups,
+                                      lr=self.config.lr_base,
+                                      eps=self.config.adam_eps,
+                                      betas=self.config.adam_betas)     
+            case OptimizerType.ADA_GRAD:
+                optimizer = t.optim.Adagrad(params=optim_groups,
+                                            lr=self.config.lr_base,
+                                            eps=self.config.adam_eps)
+            case OptimizerType.ADA_GRAD_8:
+                optimizer = Adagrad8bit(params=optim_groups,
+                                        lr=self.config.lr_base,
+                                        eps=self.config.adam_eps)
             case _:
                 raise RuntimeError(f'Not implemented optimizer: {self.config.optimizer}')
         return optimizer

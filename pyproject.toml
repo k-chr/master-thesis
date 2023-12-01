@@ -30,6 +30,9 @@ dask = "^2023.9.1"
 cleo = "^2.0.1"
 ninja = "^1.11.1.1"
 questionary = "^2.0.1"
+transformers = "^4.35.2"
+bitsandbytes = "^0.41.2.post2"
+torchinfo = "^1.8.0"
 
 [[tool.poetry.source]]
 name = "torch"
