@@ -117,8 +117,7 @@ class PreTrainingCommand(Command):
                                 
         ckpt_path: Path = exp_config.work_dir / 'artifacts' / 'last.ckpt' if not exp_config.from_pretrained else exp_config.from_pretrained
         kwargs = {'ckpt_path':ckpt_path} if ckpt_path.is_file() else {}
-        with model_runner.init_module():
-            net_module = PretrainingModule(optim_cfg, rwkv_cfg, skip_init=bool(kwargs))
+        net_module = PretrainingModule(optim_cfg, rwkv_cfg, skip_init=bool(kwargs))
         logger.info(f"Summary:\n{summary(net_module.model, (exp_config.batch_size, rwkv_cfg.context_length), dtypes=[t.int32])}")
         net_module.skip_validation_step = bool(kwargs)
         logger.info(f'Running on: {model_runner.accelerator}; Skipping initialization?: {bool(kwargs)}')
