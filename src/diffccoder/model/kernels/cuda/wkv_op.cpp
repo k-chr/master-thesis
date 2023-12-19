@@ -2,6 +2,7 @@
 
 void cuda_forward(int B, int T, int C, float *w, float *u, float *k, float *v, float *y);
 void cuda_backward(int B, int T, int C, float *w, float *u, float *k, float *v, float *y, float *gy, float *gw, float *gu, float *gk, float *gv);
+void cuda_forward_with_state(int B, int T, int C, float *w, float *u, float *k, float *v, float *y, float *s);
 
 void forward(int64_t B, int64_t T, int64_t C, torch::Tensor &w, torch::Tensor &u, torch::Tensor &k, torch::Tensor &v, torch::Tensor &y) {
     cuda_forward(B, T, C, w.data_ptr<float>(), u.data_ptr<float>(), k.data_ptr<float>(), v.data_ptr<float>(), y.data_ptr<float>());
@@ -10,12 +11,21 @@ void backward(int64_t B, int64_t T, int64_t C, torch::Tensor &w, torch::Tensor &
     cuda_backward(B, T, C, w.data_ptr<float>(), u.data_ptr<float>(), k.data_ptr<float>(), v.data_ptr<float>(), y.data_ptr<float>(), gy.data_ptr<float>(), gw.data_ptr<float>(), gu.data_ptr<float>(), gk.data_ptr<float>(), gv.data_ptr<float>());
 }
 
+void forward_with_state(torch::Tensor &w, torch::Tensor &u, torch::Tensor &k, torch::Tensor &v, torch::Tensor &y, torch::Tensor &s) {
+    const int B = k.size(0);
+    const int T = k.size(1);
+    const int C = k.size(2);
+    cuda_forward_with_state(B, T, C, w.data_ptr<float>(), u.data_ptr<float>(), k.data_ptr<float>(), v.data_ptr<float>(), y.data_ptr<float>(), s.data_ptr<float>());
+}
+
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("forward", &forward, "wkv forward");
+    m.def("forward_with_state", &forward_with_state, "wkv forward with state");
     m.def("backward", &backward, "wkv backward");
 }
 
 TORCH_LIBRARY(wkv, m) {
     m.def("forward", forward);
+    m.def("forward_with_state", forward_with_state);
     m.def("backward", backward);
 }
