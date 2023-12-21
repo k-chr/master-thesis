@@ -55,42 +55,47 @@ class RWKVTimeMix(t.jit.ScriptModule):
             self.time_mix_r = nn.Parameter(t.pow(x, 0.5 * ratio_1_to_almost0))
 
     @t.jit.script_method
-    def attention(self, x):
+    def rkv(self, x: t.Tensor, state: t.Tensor | None = None) -> tuple[t.Tensor, t.Tensor, t.Tensor, t.Tensor | None]:
         # Mix x with the previous timestep to produce xk, xv, xr
-        xk, xv, xr = self.time_mix(x)
+        xk, xv, xr, state = self.time_mix(x, state)
 
         # Use xk, xv, xr to produce k, v, r
-        k, v, r = self.rkv(xk, xv, xr)
-        sr = t.sigmoid(r)
-
-        return sr, k, v
-
-    def rkv(self, 
-            xk: t.Tensor,
-            xv: t.Tensor,
-            xr: t.Tensor) -> tuple[t.Tensor, t.Tensor, t.Tensor]:
         k = self.key(xk)
         v = self.value(xv)
         r = self.receptance(xr)
         
-        return k, v, r
+        sr = t.sigmoid(r)
 
-    def time_mix(self, x: t.Tensor) -> tuple[t.Tensor, t.Tensor, t.Tensor]:
-        xx: t.Tensor = self.time_shift(x)
+        return sr, k, v, state
+
+    def time_mix(self, x: t.Tensor, state: t.Tensor | None = None) -> tuple[t.Tensor, t.Tensor, t.Tensor, t.Tensor | None]:
+        
+        if x.size(1) == 1 and state is not None:
+            xx = state[1][:, :, self.layer_id]
+        else:
+            xx: t.Tensor = self.time_shift(x)
+            if state is not None:
+                xx[:, 0] = state[1][:, :, self.layer_id]
+    
         xk = x * self.time_mix_k + xx * (1 - self.time_mix_k)
         xv = x * self.time_mix_v + xx * (1 - self.time_mix_v)
         xr = x * self.time_mix_r + xx * (1 - self.time_mix_r)
         
-        return xk, xv, xr
+        if state is not None:
+            state[1][:, :, self.layer_id] = x[:, -1]
+        
+        return xk, xv, xr, state
 
-    def forward(self, x: t.Tensor) -> t.Tensor:
+    def forward(self, x: t.Tensor, state: t.Tensor | None = None) -> tuple[t.Tensor, t.Tensor | None]:
         B, T, C = x.size() # x = (Batch,Time,Channel)
-        sr, k, v = self.attention(x)
+        sr, k, v, s = self.rkv(x, state)
 
-        rwkv = sr * wkv(B, T, C, self.time_decay, self.time_first, k, v)
+        att, s = wkv(B, T, C, self.time_decay, self.time_first, k, v, s)
+        
+        rwkv = sr * att
         rwkv = self.output(rwkv)
         
-        return rwkv
+        return rwkv, s
 
 
 class RWKVChannelMix(t.jit.ScriptModule):
@@ -122,8 +127,14 @@ class RWKVChannelMix(t.jit.ScriptModule):
             self.channel_mix_r = nn.Parameter(t.pow(x, ratio_1_to_almost0))
 
     @t.jit.script_method
-    def forward(self, x: t.Tensor) -> t.Tensor:
+    def forward(self, x: t.Tensor, state: t.Tensor| None = None) -> tuple[t.Tensor, t.Tensor | None]:
         
+        if x.size(1) == 1 and state is not None:
+            xx = state[0][:, :, self.layer_id]
+        else:
+            xx = self.time_shift(x)
+            if state is not None:
+                xx[:, 0] = state[0][:, :, self.layer_id]
         xx = self.time_shift(x)
         xk = x * self.channel_mix_k + xx * (1 - self.channel_mix_k)
         xr = x * self.channel_mix_r + xx * (1 - self.channel_mix_r)
@@ -131,9 +142,14 @@ class RWKVChannelMix(t.jit.ScriptModule):
         k = self.key(xk)
         k = t.square(t.relu(k))
         kv = self.value(k)
-
+        
+        if state is not None:
+            state[0][:, :, self.layer_id] = x[:, -1]
+            
         rkv = t.sigmoid(self.receptance(xr)) * kv
-        return rkv
+        
+        return rkv, state
+
 
 class RWKVBlockBase(nn.Module, abc.ABC):
     def __init__(self, config: RWKVConfig, layer_id: int) -> None:
@@ -150,31 +166,34 @@ class RWKVBlockBase(nn.Module, abc.ABC):
         self.ffn = RWKVChannelMix(config, layer_id)
 
     @abc.abstractmethod
-    def _attention(self, x: t.Tensor) -> t.Tensor: ...
+    def _attention(self, x: t.Tensor, state: t.Tensor | None = None) -> tuple[t.Tensor, t.Tensor | None]: ...
     
-    def forward(self, x: t.Tensor) -> t.Tensor:
+    def forward(self, x: t.Tensor, state: t.Tensor | None = None) -> tuple[t.Tensor, t.Tensor | None]:
+        
         if self.layer_id == 0:
             x = self.ln0(x)        
-            
-        x = x + self._attention(x)
-        x = x + self.ffn(self.ln2(x))
-        return x
-    
+        att, state = self._attention(x, state)
+        x = x + att
+        ffn_out, state = self.ffn(self.ln2(x), state)
+        x = x + ffn_out
+        return x, state
+
+
 class RWKVBlock(RWKVBlockBase):
     def __init__(self, config: RWKVConfig, layer_id: int):
 
         super().__init__(config=config, layer_id=layer_id)
         self.att = RWKVTimeMix(config, layer_id)
 
-    def _attention(self, x: t.Tensor) -> t.Tensor:
-        
-        return self.att(self.ln1(x))
-    
+    def _attention(self, x: t.Tensor, state: t.Tensor | None = None) -> tuple[t.Tensor, t.Tensor | None]:
+        return self.att(self.ln1(x), state)
+
+
 class RWKVFfnPreBlock(RWKVBlockBase):
     def __init__(self, config: RWKVConfig, layer_id: int) -> None:
         super().__init__(config, layer_id)
         
         self.ffn_pre = RWKVChannelMix(config=config, layer_id=0)
         
-    def _attention(self, x: t.Tensor) -> t.Tensor:
-        return self.ffn_pre(self.ln1(x))
+    def _attention(self, x: t.Tensor, state: t.Tensor | None = None) -> tuple[t.Tensor, t.Tensor | None]:
+        return self.ffn_pre(self.ln1(x), state)

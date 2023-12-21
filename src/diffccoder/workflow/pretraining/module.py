@@ -13,7 +13,7 @@ from transformers.models.rwkv.modeling_rwkv import RwkvCausalLMOutput
 from diffccoder.configs.enums import LRSchedulerType, OptimizerType
 from diffccoder.configs.optimization_config import OptimizationConfig
 from diffccoder.configs.rwkv_config import RWKVConfig
-from diffccoder.model.rwkv.RWKVGPT import GPT
+from diffccoder.model.rwkv.RWKVCM import RWKVCM
 from diffccoder.model.rwkv.outputs import RWKVOutput
 from diffccoder.utils.l2wrap import L2Wrap
 from diffccoder.utils.lr_scheduler import EhnancedCosineSchedulerLR
@@ -37,8 +37,9 @@ class PretrainingModule(LightningModule):
         self.config = optimization_config
         self.model_config = config
         os.environ['CTX_LEN'] = str(config.context_length)
+        os.environ['USE_CACHE'] = int(config.use_cache)
         self.__skip_one_step = skip_init
-        self.model = GPT(config, skip_init) if not config.use_hugginface else RwkvForCausalLM(map_configs(config))
+        self.model = RWKVCM(config, skip_init) if not config.use_hugginface else RwkvForCausalLM(map_configs(config))
         
     def training_step(self, batch: t.Tensor, batch_idx: int) -> t.Tensor:
         loss, rwkv_out, y = self._process_batch(batch)
