@@ -10,6 +10,7 @@ from diffccoder.commands.other.generate_template_yamls import GenerateTemplateYa
 from diffccoder.commands.other.create_experiment import CreateExperimentCommand
 from diffccoder.commands.other.create_or_clone_run import CreateOrCloneRunCommand
 from diffccoder.commands.other.set_dotenv import SetDotEnvCommand
+from diffccoder.commands.other.mlflow_updater import MlFlowUpdaterCommand
 
 
 app = Application('runner', '0.0.1')
@@ -23,3 +24,4 @@ app.add(GenerateTemplateYamlsCommand())
 app.add(CreateExperimentCommand())
 app.add(CreateOrCloneRunCommand())
 app.add(SetDotEnvCommand())
+app.add(MlFlowUpdaterCommand())

@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import signal
 
 from cleo.commands.command import Command
 from cleo.helpers import argument
@@ -16,6 +17,7 @@ from diffccoder.configs.optimization_config import OptimizationConfig
 from diffccoder.configs.rwkv_config import RWKVConfig
 from diffccoder.configs.trainer_config import DebugTrainerConfig, TrainerConfig
 from diffccoder.data.npy_data_loader import NPYDataModule
+from diffccoder.utils.task_scheduler import RepeatingScheduler
 from diffccoder.workflow.model_runner import ModelRunner
 from diffccoder.workflow.pretraining.module import PretrainingModule
 
@@ -114,12 +116,21 @@ class PreTrainingCommand(Command):
                                 debug_config=debug_cfg,
                                 logger=_logger,
                                 callbacks=_callbacks)
-                                
-        ckpt_path: Path = exp_config.work_dir / 'artifacts' / 'last.ckpt' if not exp_config.from_pretrained else exp_config.from_pretrained
-        kwargs = {'ckpt_path':ckpt_path} if ckpt_path.is_file() else {}
-        net_module = PretrainingModule(optim_cfg, rwkv_cfg, skip_init=bool(kwargs))
-        logger.info(f"Summary:\n{summary(net_module.model, (exp_config.batch_size, rwkv_cfg.context_length), dtypes=[t.int32])}")
-        net_module.skip_validation_step = bool(kwargs)
-        logger.info(f'Running on: {model_runner.accelerator}; Skipping initialization?: {bool(kwargs)}')
-        model_runner.fit(net_module, datamodule=data_module, **kwargs)
-    
+        
+        r = RepeatingScheduler(function=lambda *_: self.call('mlflow-updater',
+                                                f'PLACEHOLDER {os.environ["REMOTE_TRACKING_URI"]} {exp_config.experiment_name} {exp_config.mlflow_run_name} -vvv'),
+                     interval=1)
+        #signal.signal(signal.SIGINT, lambda *_: r.cancel(), model_runner.fit_loop.teardown())
+        r.daemon = True
+        r.start()
+        
+        try:
+            ckpt_path: Path = exp_config.work_dir / 'artifacts' / 'last.ckpt' if not exp_config.from_pretrained else exp_config.from_pretrained
+            kwargs = {'ckpt_path':ckpt_path} if ckpt_path.is_file() else {}
+            net_module = PretrainingModule(optim_cfg, rwkv_cfg, skip_init=bool(kwargs))
+            logger.info(f"Summary:\n{summary(net_module.model, (exp_config.batch_size, rwkv_cfg.context_length), dtypes=[t.int32])}")
+            net_module.skip_validation_step = bool(kwargs)
+            logger.info(f'Running on: {model_runner.accelerator}; Skipping initialization?: {bool(kwargs)}')
+            model_runner.fit(net_module, datamodule=data_module, **kwargs)
+        finally:
+            r.cancel()
