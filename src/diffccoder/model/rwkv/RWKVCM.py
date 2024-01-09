@@ -1,3 +1,5 @@
+from typing import Optional
+
 from loguru import logger
 import torch as t
 from torch import nn
@@ -9,6 +11,13 @@ from diffccoder.model.rwkv.layers import RWKVBlock, RWKVFfnPreBlock
 from diffccoder.model.rwkv.outputs import RWKVOutput
 
 
+class RWKVSequential(nn.Sequential):
+    def forward(self, x: t.Tensor, state: Optional[list[t.Tensor]]) -> tuple[t.Tensor, Optional[list[t.Tensor]]]:
+        for module in self:
+            x, state = module(x, state)
+        return x, state
+
+
 class RWKV(nn.Module):
     def __init__(self, config: RWKVConfig) -> None:
         super().__init__()
@@ -17,32 +26,45 @@ class RWKV(nn.Module):
 
         self.emb = nn.Embedding(config.vocab_size, config.embedding_size)
 
-        self.blocks = nn.Sequential(*[(RWKVFfnPreBlock if config.use_ffn_pre and not i else RWKVBlock)(config, i)
+        self.blocks = RWKVSequential(*[(RWKVFfnPreBlock if config.use_ffn_pre and not i else RWKVBlock)(config, i)
                                     for i in range(config.num_hidden_layers)])
 
         self.ln_out = nn.LayerNorm(config.embedding_size)
         self.context_length = config.context_length
         
-    def forward(self, idx: t.Tensor) -> RWKVOutput:
+    def forward(self, idx: t.Tensor, state: Optional[list[t.Tensor]] = None) -> RWKVOutput:
         idx = idx.to(self.emb.weight.device)
+
+        use_cache = self.config.use_cache if not self.training else False
 
         self.step += 1
         
         x: t.Tensor = self.emb(idx)
-        x = self.blocks(x)
+        
+        if use_cache and not state:
+            shape = (x.size(0), self.config.embedding_size, self.config.num_hidden_layers)
+            state = [
+                t.zeros(
+                    *shape, dtype=x.dtype if i <= 1 else t.float32, device=x.device
+                )
+                for i in range(5)
+            ]
+            state[4] -= 1e30
+            
+        x, state = self.blocks(x, state)
         x = self.ln_out(x)
         
-        return RWKVOutput(last_hidden_state=x)
+        return RWKVOutput(last_hidden_state=x, state=state)
 
 
-class GPT(nn.Module):
+class RWKVCM(nn.Module):
     def __init__(self, config: RWKVConfig, skip_init: bool =False):
         super().__init__()
         self.rwkv = RWKV(config)
         self.head = nn.Linear(config.embedding_size, config.vocab_size, bias=False)
 
         QK_att = config.qk_attention
-        if  QK_att > 0:
+        if QK_att > 0:
             self.head_q = nn.Linear(config.embedding_size, QK_att, bias=False)
             self.head_q.scale_init = 0
             self.head_k = nn.Linear(config.embedding_size, QK_att, bias=False)
@@ -59,11 +81,11 @@ class GPT(nn.Module):
     def get_ctx_len(self):
         return self.rwkv.context_length
 
-    def forward(self, idx: t.Tensor) -> RWKVOutput:
+    def forward(self, idx: t.Tensor, state: Optional[list[t.Tensor]] = None) -> RWKVOutput:
         B, T = idx.size()
         assert T <= self.get_ctx_len(), "Cannot forward, because len(input) > model ctx_len."
         
-        rwkv_out: RWKVOutput = self.rwkv(idx)
+        rwkv_out: RWKVOutput = self.rwkv(idx, state)
         x = rwkv_out.last_hidden_state
         
         if self.config.qk_attention > 0:
@@ -78,4 +100,4 @@ class GPT(nn.Module):
         else:
             x = self.head(x)
 
-        return RWKVOutput(logits=x, last_hidden_state=rwkv_out.last_hidden_state)        
+        return RWKVOutput(logits=x, last_hidden_state=rwkv_out.last_hidden_state, state=rwkv_out.state)        

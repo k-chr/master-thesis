@@ -1,6 +1,7 @@
 from functools import lru_cache
 import os
 from pathlib import Path
+from typing import Optional
 
 from loguru import logger
 import torch as t
@@ -29,6 +30,11 @@ class WKV(Function):
     @property
     def T_MAX(cls):
         # increase this if your ctx_len is long [NOTE: TAKES LOTS OF VRAM!]
+        return WKV._get_ctx_len()
+
+    @staticmethod
+    @lru_cache
+    def _get_ctx_len():
         return int(os.environ.get('CTX_LEN', '1024'))
 
     @classmethod
@@ -39,7 +45,7 @@ class WKV(Function):
     @staticmethod
     @lru_cache
     def _should_return_state():
-        return bool(os.environ.get('USE_CACHE', '0'))
+        return bool(int(os.environ.get('USE_CACHE', '0')))
  
     @classmethod
     @property
@@ -85,11 +91,10 @@ class WKV(Function):
                 u: t.Tensor,
                 k: t.Tensor,
                 v: t.Tensor,
-                s: t.Tensor | None):
+                s: Optional[t.Tensor]):
         ctx.B = B
         ctx.T = T
         ctx.C = C
-        
         assert T <= WKV.T_MAX
         assert B * C % min(C, 32) == 0
         
@@ -99,23 +104,26 @@ class WKV(Function):
         k = cast(k, tensor_target_dtype).contiguous()
         v = cast(v, tensor_target_dtype).contiguous()
         y = t.empty((B, T, C), device=w.device, memory_format=t.contiguous_format, dtype=tensor_target_dtype)
-        if WKV.return_state or s:
+        
+        if WKV.return_state or s is not None:
             if s is None:
-                s = t.zeros(B,C, 3, dtype=t.float32, device=k.device, memory_format=t.contiguous_format)
-                s[:, :, 2] -= 1e38
+                
+                state = t.zeros(B, C, 3, dtype=t.float32, device=k.device).contiguous()
+                state[:, :, 2] -= 1e38
             else:
-                s = t.cat([_s.unsqueeze(2) for _s in s], dim=2).contiguous()
-        WKV._wkv_cuda.forward(B, T, C, w, u, k, v, y) if not s else getattr(WKV._wkv_cuda, 'forward_with_state')(B, T, C, w, u, k, v, y, s)
+                state = t.cat([_s.unsqueeze(2) for _s in s], dim=2).contiguous()
+                
+        WKV._wkv_cuda.forward(B, T, C, w, u, k, v, y) if not WKV.return_state else getattr(WKV._wkv_cuda, 'forward_with_state')(B, T, C, w, u, k, v, y, state)
         
         ctx.save_for_backward(w, u, k, v, y)
         
-        if s is not None:
-            s = [_s.squeeze(2) for _s in t.chunk(s, 3, dim=2)]
+        if WKV.return_state:
+            s = [_s.squeeze(2) for _s in t.chunk(state, 3, dim=2)]
         
         return cast(y, WKV._dtype), s
 
     @staticmethod
-    def backward(ctx: RWKVContext, gy: t.Tensor):
+    def backward(ctx: RWKVContext, gy: t.Tensor, g_state: Optional[t.Tensor]):
         B = ctx.B
         T = ctx.T
         C = ctx.C
@@ -134,7 +142,7 @@ class WKV(Function):
         gw = t.sum(gw, dim=0)
         gu = t.sum(gu, dim=0)
         
-        return (None, None, None, cast(gw, WKV._dtype), cast(gu, WKV._dtype), cast(gk, WKV._dtype), cast(gv, WKV._dtype))
+        return (None, None, None, cast(gw, WKV._dtype), cast(gu, WKV._dtype), cast(gk, WKV._dtype), cast(gv, WKV._dtype), None) 
 
 def wkv_cuda(B: int,
              T: int,
@@ -143,7 +151,7 @@ def wkv_cuda(B: int,
              u: t.Tensor,
              k: t.Tensor,
              v: t.Tensor,
-             s: t.Tensor | None = None):
+             s: Optional[list[t.Tensor]] = None):
     if not WKV.state():
        WKV.load() 
-    return WKV.apply(B, T, C, w.cuda(), u.cuda(), k.cuda(), v.cuda(), s.cuda() if s else s)
+    return WKV.apply(B, T, C, w.cuda(), u.cuda(), k.cuda(), v.cuda(), t.stack(s).cuda() if s else s)

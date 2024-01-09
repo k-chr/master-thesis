@@ -1,6 +1,8 @@
 import abc
 import math
+from typing import Optional
 
+from loguru import logger
 import torch as t
 from torch import nn
 
@@ -55,7 +57,7 @@ class RWKVTimeMix(t.jit.ScriptModule):
             self.time_mix_r = nn.Parameter(t.pow(x, 0.5 * ratio_1_to_almost0))
 
     @t.jit.script_method
-    def rkv(self, x: t.Tensor, state: t.Tensor | None = None) -> tuple[t.Tensor, t.Tensor, t.Tensor, t.Tensor | None]:
+    def rkv(self, x: t.Tensor, state: Optional[list[t.Tensor]] = None) -> tuple[t.Tensor, t.Tensor, t.Tensor, Optional[list[t.Tensor]]]:
         # Mix x with the previous timestep to produce xk, xv, xr
         xk, xv, xr, state = self.time_mix(x, state)
 
@@ -68,7 +70,7 @@ class RWKVTimeMix(t.jit.ScriptModule):
 
         return sr, k, v, state
 
-    def time_mix(self, x: t.Tensor, state: t.Tensor | None = None) -> tuple[t.Tensor, t.Tensor, t.Tensor, t.Tensor | None]:
+    def time_mix(self, x: t.Tensor, state: Optional[list[t.Tensor]] = None) -> tuple[t.Tensor, t.Tensor, t.Tensor, Optional[list[t.Tensor]]]:
         
         if x.size(1) == 1 and state is not None:
             xx = state[1][:, :, self.layer_id]
@@ -86,12 +88,18 @@ class RWKVTimeMix(t.jit.ScriptModule):
         
         return xk, xv, xr, state
 
-    def forward(self, x: t.Tensor, state: t.Tensor | None = None) -> tuple[t.Tensor, t.Tensor | None]:
+    def forward(self, x: t.Tensor, state: Optional[list[t.Tensor]] = None) -> tuple[t.Tensor, Optional[list[t.Tensor]]]:
         B, T, C = x.size() # x = (Batch,Time,Channel)
-        sr, k, v, s = self.rkv(x, state)
-
-        att, s = wkv(B, T, C, self.time_decay, self.time_first, k, v, s)
         
+        sr, k, v, s = self.rkv(x, state)
+        
+        l_s = tuple(_s[:, :, self.layer_id] for _s in s[2:]) if s is not None else None
+        att, l_s = wkv(B, T, C, self.time_decay, self.time_first, k, v, l_s)
+        
+        if l_s is not None:
+            s[2][:, :, self.layer_id] = l_s[0]
+            s[3][:, :, self.layer_id] = l_s[1]
+            s[4][:, :, self.layer_id] = l_s[2]
         rwkv = sr * att
         rwkv = self.output(rwkv)
         
@@ -127,15 +135,15 @@ class RWKVChannelMix(t.jit.ScriptModule):
             self.channel_mix_r = nn.Parameter(t.pow(x, ratio_1_to_almost0))
 
     @t.jit.script_method
-    def forward(self, x: t.Tensor, state: t.Tensor| None = None) -> tuple[t.Tensor, t.Tensor | None]:
+    def forward(self, x: t.Tensor, state: Optional[list[t.Tensor]] = None) -> tuple[t.Tensor, Optional[list[t.Tensor]]]:
         
         if x.size(1) == 1 and state is not None:
             xx = state[0][:, :, self.layer_id]
         else:
-            xx = self.time_shift(x)
+            xx: t.Tensor = self.time_shift(x)
             if state is not None:
                 xx[:, 0] = state[0][:, :, self.layer_id]
-        xx = self.time_shift(x)
+
         xk = x * self.channel_mix_k + xx * (1 - self.channel_mix_k)
         xr = x * self.channel_mix_r + xx * (1 - self.channel_mix_r)
 
@@ -166,9 +174,9 @@ class RWKVBlockBase(nn.Module, abc.ABC):
         self.ffn = RWKVChannelMix(config, layer_id)
 
     @abc.abstractmethod
-    def _attention(self, x: t.Tensor, state: t.Tensor | None = None) -> tuple[t.Tensor, t.Tensor | None]: ...
+    def _attention(self, x: t.Tensor, state: Optional[list[t.Tensor]] = None) -> tuple[t.Tensor, Optional[list[t.Tensor]]]: ...
     
-    def forward(self, x: t.Tensor, state: t.Tensor | None = None) -> tuple[t.Tensor, t.Tensor | None]:
+    def forward(self, x: t.Tensor, state: Optional[list[t.Tensor]] = None) -> tuple[t.Tensor, Optional[list[t.Tensor]]]:
         
         if self.layer_id == 0:
             x = self.ln0(x)        
@@ -185,7 +193,7 @@ class RWKVBlock(RWKVBlockBase):
         super().__init__(config=config, layer_id=layer_id)
         self.att = RWKVTimeMix(config, layer_id)
 
-    def _attention(self, x: t.Tensor, state: t.Tensor | None = None) -> tuple[t.Tensor, t.Tensor | None]:
+    def _attention(self, x: t.Tensor, state: Optional[list[t.Tensor]] = None) -> tuple[t.Tensor, Optional[list[t.Tensor]]]:
         return self.att(self.ln1(x), state)
 
 
@@ -195,5 +203,5 @@ class RWKVFfnPreBlock(RWKVBlockBase):
         
         self.ffn_pre = RWKVChannelMix(config=config, layer_id=0)
         
-    def _attention(self, x: t.Tensor, state: t.Tensor | None = None) -> tuple[t.Tensor, t.Tensor | None]:
+    def _attention(self, x: t.Tensor, state: Optional[list[t.Tensor]] = None) -> tuple[t.Tensor, Optional[list[t.Tensor]]]:
         return self.ffn_pre(self.ln1(x), state)
