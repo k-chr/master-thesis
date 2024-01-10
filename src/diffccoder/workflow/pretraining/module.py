@@ -37,12 +37,12 @@ class PretrainingModule(LightningModule):
         self.config = optimization_config
         self.model_config = config
         os.environ['CTX_LEN'] = str(config.context_length)
-        os.environ['USE_CACHE'] = int(config.use_cache)
+        os.environ['USE_CACHE'] = str(int(config.use_cache and not self.training))
         self.__skip_one_step = skip_init
         self.model = RWKVCM(config, skip_init) if not config.use_hugginface else RwkvForCausalLM(map_configs(config))
         
     def training_step(self, batch: t.Tensor, batch_idx: int) -> t.Tensor:
-        loss, rwkv_out, y = self._process_batch(batch)
+        loss, _, y = self._process_batch(batch)
         
         if self.__skip_one_step:
             self.__skip_one_step = False
@@ -55,7 +55,7 @@ class PretrainingModule(LightningModule):
         return L2Wrap.apply(loss, y.to(self.dtype))
 
     def validation_step(self, batch: t.Tensor, batch_idx: int) -> t.Tensor:
-        loss, rwkv_out, y = self._process_batch(batch)
+        loss, _, _ = self._process_batch(batch)
         
         if not self.trainer.sanity_checking and not self.skip_validation_step:
             self.__restore_checkpointers()
@@ -80,7 +80,7 @@ class PretrainingModule(LightningModule):
                 model_checkpointer.save_top_k = 0
     
     def _process_batch(self, batch: t.Tensor):
-        index, x, y = batch
+        _, x, y = batch
         y = y.to(t.int64)
         rwkv_out: RWKVOutput | RwkvCausalLMOutput = self.model(x)
 

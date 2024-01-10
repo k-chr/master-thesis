@@ -4,6 +4,13 @@ ENV PYTHONUNBUFFERED True
 ENV TZ=Europe/Warsaw
 ENV POETRY_DOTENV_LOCATION=/root/.env
 ENV PYTHONDONTWRITEBYTECODE 1
+ENV MLFLOW_TRACKING_URI="sqlite:////root/share/mlruns.db"
+ENV MLFLOW_BACKEND_STORE_URI="sqlite:////root/share/mlruns.db"
+ENV _MLFLOW_SERVER_FILE_STORE="sqlite:////root/share/mlruns.db"
+ENV _MLFLOW_SERVER_SERVE_ARTIFACTS 0
+ENV MLFLOW_SERVE_ARTIFACTS 0
+ENV MLFLOW_DEFAULT_ARTIFACT_ROOT="./mlruns"
+ENV _MLFLOW_SERVER_ARTIFACT_ROOT="./mlruns"
 WORKDIR /master-thesis/
 ADD . /master-thesis/
 
@@ -43,11 +50,11 @@ RUN --mount=type=secret,id=MLFLOW_TRACKING_USERNAME \
     --mount=type=secret,id=MLFLOW_TRACKING_URI \
     export MLFLOW_TRACKING_USERNAME=$(cat /run/secrets/MLFLOW_TRACKING_USERNAME) && \
     export MLFLOW_TRACKING_PASSWORD=$(cat /run/secrets/MLFLOW_TRACKING_PASSWORD) && \
-    export MLFLOW_TRACKING_URI=$(cat /run/secrets/MLFLOW_TRACKING_URI) && \
+    export REMOTE_TRACKING_URI=$(cat /run/secrets/MLFLOW_TRACKING_URI) && \    
     touch ~/.env && \
     sudo chmod 777 ~/.env && \
     ls -la ~/.env && \
-    poetry run -vvv app set-dotenv MLFLOW_TRACKING_USERNAME MLFLOW_TRACKING_PASSWORD MLFLOW_TRACKING_URI -vvv
+    poetry run -vvv app set-dotenv MLFLOW_TRACKING_USERNAME MLFLOW_TRACKING_PASSWORD MLFLOW_TRACKING_URI REMOTE_TRACKING_URI -vvv
 
 ENV PYTHONDONTWRITEBYTECODE 0
 

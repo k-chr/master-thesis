@@ -28,6 +28,7 @@ class ExperimentConfig(BaseConfig):
     mlflow_continue_run: bool = True 
     mlflow_run_name: str | None = None
     mlflow_http_timeout: int = 120
+    mlflow_log_to_remote_freq: int = 120
     
     use_tensorboard: bool = False
     tensorboard: Path | None = None

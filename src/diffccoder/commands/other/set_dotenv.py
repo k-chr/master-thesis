@@ -5,6 +5,7 @@ from cleo.commands.command import Command
 from cleo.helpers import argument
 from loguru import logger
 
+
 class SetDotEnvCommand(Command):
     name = 'set-dotenv'
     description = 'set_dotenv.py - Exports provided enviroment variables to .env file.'
