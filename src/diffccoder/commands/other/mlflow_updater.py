@@ -20,10 +20,10 @@ def get_local_metrics(run: Run, client: mlflow.MlflowClient, last_remote_metrics
         
         if last_remote_metrics: 
             return {metric.key:[sql_metric.to_mlflow_entity() for sql_metric in session.query(SqlMetric).filter_by(run_uuid=run_id,
-                key=metric.key).where(SqlMetric.step > metric.step).all()] for metric in last_remote_metrics}
+                key=metric.key).where(SqlMetric.step > metric.step).order_by(SqlMetric.timestamp).all()] for metric in last_remote_metrics}
         else:
             d = defaultdict(lambda: [])
-            sql_metrics = session.query(SqlMetric).filter_by(run_uuid=run_id).all()
+            sql_metrics = session.query(SqlMetric).filter_by(run_uuid=run_id).order_by(SqlMetric.timestamp).all()
             for sql_metric in sql_metrics:
                 d[sql_metric.key].append(sql_metric.to_mlflow_entity())
                 
@@ -73,7 +73,10 @@ class MlFlowUpdaterCommand(Command):
             metrics_to_update = get_local_metrics(local_run, local_client, metrics)
 
             for _metrics in metrics_to_update.values():
-                remote_client.log_batch(run.info.run_id, tuple(_metrics), tags=tuple(RunTag(key, value) for key, value in run.data.tags.items()))
+                remote_client.log_batch(run.info.run_id,
+                                        tuple(_metrics),
+                                        tags=tuple(RunTag(key, value) for key, value in run.data.tags.items()),
+                                        synchronous=True)
 
         except Exception as e:
             logger.error(e)

@@ -116,10 +116,9 @@ class PreTrainingCommand(Command):
                                 debug_config=debug_cfg,
                                 logger=_logger,
                                 callbacks=_callbacks)
-        
-        r = RepeatingScheduler(function=lambda *_: self.call('mlflow-updater',
-                                                f'PLACEHOLDER {os.environ["REMOTE_TRACKING_URI"]} {exp_config.experiment_name} {exp_config.mlflow_run_name} -vvv'),
-                     interval=1)
+        command = f'PLACEHOLDER {os.environ["REMOTE_TRACKING_URI"]} {exp_config.experiment_name} {exp_config.mlflow_run_name} -vvv'
+        r = RepeatingScheduler(function=lambda *_: self.call('mlflow-updater', command),
+                               interval=exp_config.mlflow_log_to_remote_freq)
         #signal.signal(signal.SIGINT, lambda *_: r.cancel(), model_runner.fit_loop.teardown())
         r.daemon = True
         r.start()
