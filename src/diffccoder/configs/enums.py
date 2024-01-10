@@ -26,9 +26,17 @@ class OptimizerType(Enum):
     ADA_GRAD = auto()
     ADA_GRAD_8 = auto()
     
+class BetaSchedule(Enum):
+    COSINE = auto()
+    SIGMOID = auto()
+    SQRT = auto()
+    LINEAR = auto()
+    PW_LINEAR = auto()
+
 __enums__: Final[Enum]= [
+    BetaSchedule,
     LRSchedulerType,
-    WarmUpMetric,
     OptimizerType,
+    WarmUpMetric,
     WarmUpRoutine
 ]
