@@ -66,14 +66,21 @@ class WKV(Function):
 
     @staticmethod
     def load():
-        logger.info(f'Loading WKV cuda-kernel for {WKV._dtype} and ctx len: {WKV.T_MAX}')
+        
+        import sys
+        
         flags = ['-res-usage',
-                 '--maxrregcount 60',
                  '--use_fast_math',
                  '-O3',
-                 '-Xptxas -O3',
                  '--extra-device-vectorization',
                  f'-DTmax={WKV.T_MAX}']
+        
+        if sys.platform != 'win32':
+            flags += ['--maxrregcount 60',
+                      '-Xptxas -O3']
+        
+        logger.info(f'Loading WKV cuda-kernel for {WKV._dtype} and ctx len: {WKV.T_MAX}')
+        
         extra_flags = [] if WKV._dtype is not t.bfloat16 else ['-t 4', '-std=c++17']
         op_fname = 'cuda/wkv_op' + ('' if WKV._dtype is not t.bfloat16 else '_bf16')
         cuda_fname = 'cuda/wkv_cuda' + ('' if WKV._dtype is not t.bfloat16 else '_bf16')
