@@ -5,6 +5,62 @@ import torch as t
 from diffccoder.utils.generic import ModelOutput
 
 
+@dataclass  
+class TimeMixState:
+    shift_state: t.Tensor
+    wkv_state: t.Tensor
+
+
+@dataclass
+class ChannelMixState:
+    shift_state: t.Tensor
+
+
+@dataclass
+class BlockState:
+    time_mix_state: TimeMixState
+    channel_mix_state: ChannelMixState
+
+
+class BlockStateList:
+
+    def __init__(self, shift_states, wkv_states):
+        self.wkv_states = wkv_states
+        self.shift_states = shift_states
+
+    @staticmethod
+    def create(N, B, C, device, dtype):
+        result = BlockStateList.empty(N, B, C, device, dtype)
+        result.wkv_states[:] = 0
+        result.wkv_states[:, :, :, -1] = -1e38
+        result.shift_states[:] = 0
+        return result
+    
+    @staticmethod
+    def empty_like(state: 'BlockStateList'):
+        wkv_states = t.empty_like(state.wkv_states)
+        shift_states = t.empty_like(state.shift_states)
+        return BlockStateList(shift_states, wkv_states)
+    
+    @staticmethod
+    def empty(N, B, C, device, dtype):
+        wkv_states = t.empty((N, B, C, 3),
+                                 device=device,
+                                 dtype=t.float)
+        shift_states = t.empty((N, 2, B, C), device=device, dtype=dtype)
+        return BlockStateList(shift_states, wkv_states)
+
+    def __getitem__(self, layer: int):
+        return BlockState(
+            TimeMixState(self.shift_states[layer, 0], self.wkv_states[layer]),
+            ChannelMixState(self.shift_states[layer, 1]))
+
+    def __setitem__(self, layer: int, state: BlockState):
+        self.shift_states[layer, 0] = state.time_mix_state.shift_state
+        self.wkv_states[layer] = state.time_mix_state.wkv_state
+        self.shift_states[layer, 1] = state.channel_mix_state.shift_state
+    
+
 @dataclass
 class RWKVOutput(ModelOutput):
     """
@@ -32,7 +88,6 @@ class RWKVOutput(ModelOutput):
     """
     logits: t.FloatTensor = None
     last_hidden_state: t.FloatTensor = None
-    state: list[t.FloatTensor] | None = None
+    state: BlockStateList | None = None
     hidden_states: tuple[t.FloatTensor] | None = None
     attentions: tuple[t.FloatTensor] | None = None
-    
