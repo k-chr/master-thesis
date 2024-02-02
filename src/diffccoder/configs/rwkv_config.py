@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+from transformers import RwkvConfig
+
 from diffccoder.configs.base import BaseConfig
 
 @dataclass
@@ -20,3 +22,12 @@ class RWKVConfig(BaseConfig):
     use_cache: bool = True
     use_hugginface: bool = False
     use_original_impl: bool = False
+
+
+def map_configs(cfg: RWKVConfig) -> RwkvConfig:
+    return RwkvConfig(vocab_size=cfg.vocab_size,
+                      context_length=cfg.context_length,
+                      hidden_size=cfg.embedding_size,
+                      num_hidden_layers=cfg.num_hidden_layers,
+                      attention_hidden_size=cfg.attention_hidden_size,
+                      intermediate_size=cfg.qk_attention)

@@ -7,26 +7,15 @@ import torch as t
 from torch.functional import F
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler, StepLR
-from transformers import RwkvForCausalLM, RwkvConfig
-from transformers.models.rwkv.modeling_rwkv import RwkvCausalLMOutput
 
 from diffccoder.configs.enums import LRSchedulerType, OptimizerType
 from diffccoder.configs.optimization_config import OptimizationConfig
 from diffccoder.configs.rwkv_config import RWKVConfig
 from diffccoder.model.rwkv.RWKVCM import RWKVCM
-from diffccoder.model.rwkv.outputs import RWKVOutput
+from diffccoder.utils.outputs import RWKVOutput
 from diffccoder.utils.l2wrap import L2Wrap
 from diffccoder.utils.lr_scheduler import EhnancedCosineSchedulerLR
 from diffccoder.utils.warm_up_scheduler import WarmUpScheduler
-
-
-def map_configs(cfg: RWKVConfig) -> RwkvConfig:
-    return RwkvConfig(vocab_size=cfg.vocab_size,
-                      context_length=cfg.context_length,
-                      hidden_size=cfg.embedding_size,
-                      num_hidden_layers=cfg.num_hidden_layers,
-                      attention_hidden_size=cfg.attention_hidden_size,
-                      intermediate_size=cfg.qk_attention)
 
 
 class PretrainingModule(LightningModule):
@@ -39,7 +28,7 @@ class PretrainingModule(LightningModule):
         os.environ['CTX_LEN'] = str(config.context_length)
         os.environ['USE_CACHE'] = str(int(config.use_cache and not self.training))
         self.__skip_one_step = skip_init
-        self.model = RWKVCM(config, skip_init) if not config.use_hugginface else RwkvForCausalLM(map_configs(config))
+        self.model = RWKVCM(config, skip_init)
         
     def training_step(self, batch: t.Tensor, batch_idx: int) -> t.Tensor:
         loss, _, y = self._process_batch(batch)
@@ -82,7 +71,7 @@ class PretrainingModule(LightningModule):
     def _process_batch(self, batch: t.Tensor):
         _, x, y = batch
         y = y.to(t.int64)
-        rwkv_out: RWKVOutput | RwkvCausalLMOutput = self.model(x)
+        rwkv_out: RWKVOutput = self.model(x)
 
         shift_x_hat = rwkv_out.logits[..., :-1, :].contiguous()
         shift_y = y[..., 1:].contiguous()
