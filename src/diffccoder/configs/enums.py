@@ -33,6 +33,11 @@ class BetaSchedule(Enum):
     LINEAR = auto()
     PW_LINEAR = auto()
 
+class InferenceSamplerType(Enum):
+    DDIM = auto()
+    SKIP = auto()
+    DEFAULT = auto()
+
 class LossType(Enum):
     MSE = auto()  # use raw MSE loss (and KL when learning variances)
     RESCALED_MSE = auto() # use raw MSE loss (with RESCALED_KL when learning variances)
@@ -56,12 +61,11 @@ class DiffusionModelType(Enum):
     NOISE = auto()  # the model predicts epsilon
 
 
-__enums__: Final[Enum]= [
-    BetaSchedule,
-    DiffusionModelType,
-    LossType,
-    LRSchedulerType,
-    OptimizerType,
-    WarmUpMetric,
-    WarmUpRoutine
-]
+__enums__: Final[Enum]= [BetaSchedule,
+                         DiffusionModelType,
+                         InferenceSamplerType,
+                         LossType,
+                         LRSchedulerType,
+                         OptimizerType,
+                         WarmUpMetric,
+                         WarmUpRoutine]
