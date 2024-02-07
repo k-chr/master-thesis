@@ -3,9 +3,9 @@ from abc import ABC, abstractmethod
 import numpy as np
 import torch as t
 from torch import nn
-import torch.distributed as dist
 
 from diffccoder.configs.diffusion_config import DiffusionConfig
+
 
 class ScheduleSampler(nn.Module, ABC):
     """
@@ -17,8 +17,6 @@ class ScheduleSampler(nn.Module, ABC):
     However, subclasses may override sample() to change how the resampled
     terms are reweighted, allowing for actual changes in the objective.
     """
-    
-    
 
     @abstractmethod
     def weights(self):
@@ -28,7 +26,7 @@ class ScheduleSampler(nn.Module, ABC):
         The weights needn't be normalized, but must be positive.
         """
 
-    def sample(self, batch_size, device, step_ratio=None):
+    def sample(self, batch_size, device):
         """
         Importance-sample timesteps for a batch.
 
@@ -60,7 +58,7 @@ class XYUniformSampler(ScheduleSampler):
     def weights(self):
         return np.ones([self.config.timesteps + self.config.tgt_len], dtype=np.float64)
     
-    def sample(self, batch_size: int, device: t.device, seq_len: t.Tensor | int, step_ratio: float | None =None):
+    def sample(self, batch_size: int, device: t.device, seq_len: t.Tensor | int):
         """
         example:
         num_timesteps = 3, seq_len = 5
