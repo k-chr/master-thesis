@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from pathlib import Path
 
 from diffccoder.configs.base import BaseConfig
 from diffccoder.configs.enums import BetaSchedule, DiffusionModelType, InferenceSamplerType
@@ -24,3 +25,4 @@ class DiffusionConfig(BaseConfig):
     end_point_scale: float = 2.0
     scale_embedding: bool = False
     inference_sampler: InferenceSamplerType = InferenceSamplerType.DEFAULT
+    encoder_path: Path | None = None

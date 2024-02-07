@@ -91,3 +91,19 @@ class RWKVOutput(ModelOutput):
     state: BlockStateList | None = None
     hidden_states: tuple[t.FloatTensor] | None = None
     attentions: tuple[t.FloatTensor] | None = None
+    
+    
+@dataclass
+class DiffusionLosses:
+    loss: t.Tensor = None
+    mse_loss: t.Tensor = None
+    t0_loss: t.Tensor = None
+    tT_loss: t.Tensor = None
+    decoder_nll: t.Tensor = None
+    mse_pre: t.Tensor = None
+    
+@dataclass
+class DiffusionPrediction:
+    pred_x_start: t.Tensor
+    pred_noise: t.Tensor
+    pred_x_prev: t. Tensor

@@ -33,5 +33,6 @@ class ExperimentConfig(BaseConfig):
     use_tensorboard: bool = False
     tensorboard: Path | None = None
     
+    metrics_to_save_cp: list[str] = field(default_factory=lambda:['loss', 'perplexity'])
     metrics_to_log: list[str] = field(default_factory=lambda:['loss', 'perplexity'])
     
