@@ -177,7 +177,7 @@ class WKV(Function):
         
         ctx.save_for_backward(w, u, k, v, y)
         
-        return cast(y, WKVKernel._dtype), state
+        return cast(y, WKVKernel._dtype), state if WKV.return_state or s is not None else None
 
     @staticmethod
     def backward(ctx: RWKVContext, gy: t.Tensor, g_state: Optional[t.Tensor]):
