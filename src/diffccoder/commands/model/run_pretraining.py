@@ -1,6 +1,5 @@
 import os
 from pathlib import Path
-import signal
 
 from cleo.commands.command import Command
 from cleo.helpers import argument
@@ -18,8 +17,8 @@ from diffccoder.configs.rwkv_config import RWKVConfig
 from diffccoder.configs.trainer_config import DebugTrainerConfig, TrainerConfig
 from diffccoder.data.npy_data_loader import NPYDataModule
 from diffccoder.utils.task_scheduler import RepeatingScheduler
-from diffccoder.workflow.model_runner import ModelRunner
-from diffccoder.workflow.pretraining.module import PretrainingModule
+from diffccoder.lightning_modules.model_runner import ModelRunner
+from diffccoder.lightning_modules.pretraining.module import PretrainingModule
 
 DEFAULT_RUN_NAME = 'Pre-Training'
 
@@ -63,7 +62,7 @@ class PreTrainingCommand(Command):
             
         _callbacks.append(last)
             
-        for metric in exp_config.metrics_to_log:
+        for metric in exp_config.metrics_to_save_cp:
             monitor = ModelCheckpoint(dirpath=exp_config.work_dir / 'artifacts',
                                       filename=f'best_on_{metric}',
                                       save_top_k=1,
@@ -117,9 +116,9 @@ class PreTrainingCommand(Command):
                                 logger=_logger,
                                 callbacks=_callbacks)
         command = f'PLACEHOLDER {os.environ["REMOTE_TRACKING_URI"]} {exp_config.experiment_name} {exp_config.mlflow_run_name} -vvv'
+        
         r = RepeatingScheduler(function=lambda *_: self.call('mlflow-updater', command),
                                interval=exp_config.mlflow_log_to_remote_freq)
-        #signal.signal(signal.SIGINT, lambda *_: r.cancel(), model_runner.fit_loop.teardown())
         r.daemon = True
         r.start()
         

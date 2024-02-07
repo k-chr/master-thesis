@@ -12,7 +12,7 @@ from diffccoder.utils.outputs import BlockState, BlockStateList, ChannelMixState
 
 
 class RWKVTimeMix(t.jit.ScriptModule):
-    def __init__(self, config: RWKVConfig, layer_id: int, cross_att: bool):
+    def __init__(self, config: RWKVConfig, layer_id: int, cross_att: bool = False):
         super().__init__()
         self.cross_att = cross_att
         self.layer_id = layer_id
@@ -86,7 +86,7 @@ class RWKVTimeMix(t.jit.ScriptModule):
         xr = x * self.time_mix_r + xx * (1 - self.time_mix_r)
         
         return xk, xv, xr, x[:, -1] if state is not None else None
-
+    
     def forward(self, x: t.Tensor, state: Optional[TimeMixState]) -> tuple[t.Tensor, Optional[TimeMixState]]:
         B, T, C = x.size() # x = (Batch,Time,Channel)
         
@@ -129,7 +129,6 @@ class RWKVChannelMix(t.jit.ScriptModule):
             self.channel_mix_k = nn.Parameter(t.pow(x, ratio_1_to_almost0))
             self.channel_mix_r = nn.Parameter(t.pow(x, ratio_1_to_almost0))
 
-    @t.jit.script_method
     def forward(self, x: t.Tensor, state: Optional[ChannelMixState] = None) -> tuple[t.Tensor, Optional[ChannelMixState]]:
         
         if x.size(1) == 1 and state:
