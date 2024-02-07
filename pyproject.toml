@@ -33,6 +33,7 @@ questionary = "^2.0.1"
 transformers = "^4.35.2"
 bitsandbytes = "^0.41.2.post2"
 torchinfo = "^1.8.0"
+einops = "^0.7.0"
 
 [[tool.poetry.source]]
 name = "torch"
