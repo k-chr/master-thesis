@@ -3,7 +3,7 @@ from pathlib import Path
 
 from cleo.commands.command import Command
 from cleo.helpers import argument
-from lightning.pytorch.loggers import MLFlowLogger, TensorBoardLogger, CSVLogger
+from lightning.pytorch.loggers import TensorBoardLogger, CSVLogger
 from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor, ModelSummary
 from loguru import logger
 import mlflow as mlflow_client
@@ -16,6 +16,8 @@ from diffccoder.configs.optimization_config import OptimizationConfig
 from diffccoder.configs.rwkv_config import RWKVConfig
 from diffccoder.configs.trainer_config import DebugTrainerConfig, TrainerConfig
 from diffccoder.data.npy_data_loader import NPYDataModule
+from diffccoder.data.utils import get_last_ckpt_name
+from diffccoder.lightning_modules.mlflow_distinct_logger import MLFlowDistinctLogger
 from diffccoder.utils.task_scheduler import RepeatingScheduler
 from diffccoder.lightning_modules.model_runner import ModelRunner
 from diffccoder.lightning_modules.pretraining.module import PretrainingModule
@@ -88,7 +90,7 @@ class PreTrainingCommand(Command):
                     exp_config.mlflow_run_id = run.info.run_id
                     dump_config(exp_config, exp_config_path)
                 
-            mlflow = MLFlowLogger(experiment_name=exp_config.experiment_name,
+            mlflow = MLFlowDistinctLogger(experiment_name=exp_config.experiment_name,
                                   run_name=exp_config.mlflow_run_name,
                                   run_id=exp_config.mlflow_run_id,
                                   tracking_uri=exp_config.mlflow_server,
@@ -97,7 +99,7 @@ class PreTrainingCommand(Command):
             _logger.append(mlflow)
             
         elif exp_config.mlflow_enabled:
-            logger.error(f'MlFlow is set to be enabled in experiment, but experiment is not set-up. Closing...')
+            logger.error(f'MLFlow is set to be enabled in experiment, but experiment is not set-up. Closing...')
             return -1
         
         if exp_config.use_tensorboard:
@@ -123,12 +125,16 @@ class PreTrainingCommand(Command):
         r.start()
         
         try:
-            ckpt_path: Path = exp_config.work_dir / 'artifacts' / 'last.ckpt' if not exp_config.from_pretrained else exp_config.from_pretrained
+            ckpt_dir: Path = exp_config.work_dir / 'artifacts'
+            last_ckpt_fname = get_last_ckpt_name(ckpt_dir)    
+            
+            ckpt_path: Path = ckpt_dir / last_ckpt_fname if not exp_config.from_pretrained else exp_config.from_pretrained
             kwargs = {'ckpt_path':ckpt_path} if ckpt_path.is_file() else {}
             net_module = PretrainingModule(optim_cfg, rwkv_cfg, skip_init=bool(kwargs))
-            logger.info(f"Summary:\n{summary(net_module.model, (exp_config.batch_size, rwkv_cfg.context_length), dtypes=[t.int32])}")
-            net_module.skip_validation_step = bool(kwargs)
-            logger.info(f'Running on: {model_runner.accelerator}; Skipping initialization?: {bool(kwargs)}')
+
+            logger.info(f"Summary:\n{summary(net_module.model, (exp_config.batch_size, rwkv_cfg.context_length), dtypes=[t.int64])}")
+
+            logger.info(f'Running on: {model_runner.accelerator}; Skipping initialisation?: {bool(kwargs)}')
             model_runner.fit(net_module, datamodule=data_module, **kwargs)
         finally:
             r.cancel()
