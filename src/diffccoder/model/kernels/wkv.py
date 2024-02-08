@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 from typing import Optional
 
+import einops
 from loguru import logger
 import torch as t
 from torch.autograd.function import Function
@@ -117,13 +118,13 @@ class StateWKV(Function):
         
         tensor_target_dtype = t.float32 if WKVKernel._dtype != t.bfloat16 else t.bfloat16
         
-        gw = t.empty_like(w).contiguous()
-        gu = t.empty_like(u).contiguous()
+        gw = einops.repeat(t.empty_like(w).to(tensor_target_dtype), 'c -> b c', b=B).contiguous()
+        gu = einops.repeat(t.empty_like(u), 'c -> b c', b=B).contiguous()
         gk = t.empty_like(k).contiguous()
         gv = t.empty_like(v).contiguous()
         g_state = t.empty_like(state).contiguous()
         
-        WKVKernel._kernel.backward(B, T, C, w, u, k, v, state, cast(gy, tensor_target_dtype).contiguous(), gnew_state, gw, gu, gk, gv, g_state)
+        getattr(WKVKernel._kernel, 'backward_state')(B, T, C, w, u, k, v, state, cast(gy, tensor_target_dtype).contiguous(), gnew_state, gw, gu, gk, gv, g_state)
         
         gw = t.sum(gw, dim=0)
         gu = t.sum(gu, dim=0)
@@ -187,10 +188,10 @@ class WKV(Function):
         assert T <= WKVKernel.T_MAX
         assert B * C % min(C, 32) == 0
         w, u, k, v, y = ctx.saved_tensors
-
         tensor_target_dtype = t.float32 if WKVKernel._dtype != t.bfloat16 else t.bfloat16
-        gw = t.empty_like(w).contiguous()
-        gu = t.empty_like(u).contiguous()
+
+        gw = einops.repeat(t.empty_like(w).to(tensor_target_dtype), 'c -> b c', b=B).contiguous()
+        gu = einops.repeat(t.empty_like(u), 'c -> b c', b=B).contiguous()
         gk = t.empty_like(k).contiguous()
         gv = t.empty_like(v).contiguous()
         
@@ -198,7 +199,6 @@ class WKV(Function):
         
         gw = t.sum(gw, dim=0)
         gu = t.sum(gu, dim=0)
-        
         return (None, None, None, cast(gw, WKVKernel._dtype), cast(gu, WKVKernel._dtype), cast(gk, WKVKernel._dtype), cast(gv, WKVKernel._dtype), None) 
 
 def wkv_cuda(B: int,
