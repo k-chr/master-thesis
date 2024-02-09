@@ -79,12 +79,13 @@ class XYUniformSampler(ScheduleSampler):
             t.clamp(indices - (seq_len - 1), 0)
         ], dim=-1)
 
+        seq_len: int = max(seq_len) if not isinstance(seq_len, int) else seq_len
         end_point = t.tensor(
-            [[int(self.config.end_point_scale * max(seq_len)), self.timesteps - 1]]
+            [[int(self.config.end_point_scale * seq_len), self.timesteps - 1]]
         ).repeat(batch_size, 1).type_as(middle_point)
 
         # the part of padding will be mask
-        xs: t.Tensor = t.arange(max(seq_len))
+        xs: t.Tensor = t.arange(seq_len)
         xs = xs.unsqueeze(0).repeat(batch_size, 1).type_as(middle_point)
         """
         (y - end_y) / (middle_y - end_y) = (x - end_x) / (middle_x - end_x)
@@ -100,5 +101,5 @@ class XYUniformSampler(ScheduleSampler):
         
         weights_np = 1 / (len(p) * p[indices_np])
         weights = t.from_numpy(weights_np).float().to(device)
-        weights = weights.unsqueeze(-1).repeat(1, max(seq_len))
+        weights = weights.unsqueeze(-1).repeat(1, seq_len)
         return ys, weights

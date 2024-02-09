@@ -94,7 +94,7 @@ class RWKVOutput(ModelOutput):
     
     
 @dataclass
-class DiffusionLosses:
+class DiffusionLosses(ModelOutput):
     loss: t.Tensor = None
     mse_loss: t.Tensor = None
     t0_loss: t.Tensor = None
