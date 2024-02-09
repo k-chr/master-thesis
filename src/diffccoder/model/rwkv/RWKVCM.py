@@ -6,7 +6,6 @@ from torch import nn
 from torch.functional import F
 
 from diffccoder.configs.rwkv_config import RWKVConfig
-from diffccoder.model.rwkv.initialization import RWKV_Init
 from diffccoder.model.rwkv.layers import RWKVBlock, RWKVFfnPreBlock, RWKVSequential
 from diffccoder.utils.outputs import BlockStateList, RWKVOutput
 
@@ -39,7 +38,7 @@ class RWKV(nn.Module):
 
 
 class RWKVCM(nn.Module):
-    def __init__(self, config: RWKVConfig, skip_init: bool =False):
+    def __init__(self, config: RWKVConfig):
         super().__init__()
         self.rwkv = RWKV(config)
         self.head = nn.Linear(config.embedding_size, config.vocab_size, bias=False)
@@ -53,9 +52,6 @@ class RWKVCM(nn.Module):
             self.register_buffer("copy_mask", t.tril(
                 t.ones(config.context_length, config.context_length)))
         self.config = config
-        
-        if not skip_init:
-            RWKV_Init(self, config) 
 
         logger.info(f"Number of parameters: {sum(p.numel() for p in self.parameters())}")
     

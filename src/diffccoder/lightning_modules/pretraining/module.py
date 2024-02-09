@@ -1,5 +1,6 @@
 import os
 
+from lightning.pytorch.utilities.rank_zero import rank_zero_only
 import torch as t
 from torch.functional import F
 
@@ -7,6 +8,7 @@ from diffccoder.configs.optimization_config import OptimizationConfig
 from diffccoder.configs.rwkv_config import RWKVConfig
 from diffccoder.lightning_modules.training_base import TrainingBase
 from diffccoder.model.rwkv.RWKVCM import RWKVCM
+from diffccoder.model.rwkv.initialization import RWKV_Init
 from diffccoder.utils.outputs import RWKVOutput
 from diffccoder.utils.l2wrap import L2Wrap
 
@@ -20,7 +22,9 @@ class PretrainingModule(TrainingBase):
         self.model_config = config
         os.environ['CTX_LEN'] = str(config.context_length)
         os.environ['USE_CACHE'] = str(int(config.use_cache and not self.training))
-        self.model = RWKVCM(config, skip_init)
+        self.model = RWKVCM(config)
+        if self.save_before_training and rank_zero_only.rank == 0:
+            RWKV_Init(self.model, self.model_config)
  
     def training_step(self, batch: t.Tensor, batch_idx: int) -> t.Tensor:
         loss, _, y = self._process_batch(batch)
