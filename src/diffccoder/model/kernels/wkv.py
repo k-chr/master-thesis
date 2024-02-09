@@ -8,6 +8,7 @@ from loguru import logger
 import torch as t
 from torch.autograd.function import Function
 from torch.utils.cpp_extension import load
+from diffccoder.utils.generic import get_dtype
 
 from diffccoder.utils.rwkv_kernel_context import RWKVContext
 
@@ -46,9 +47,7 @@ class WKVKernel:
     @lru_cache
     def _get_dtype():
         str_type = os.environ.get('DTYPE', '32-true')
-        if '32' in str_type: return t.float32
-        elif 'bf16' in str_type: return t.bfloat16
-        else: return t.float16
+        return get_dtype(str_type)
     
     @staticmethod
     def state(): 
@@ -57,13 +56,17 @@ class WKVKernel:
     @staticmethod
     def load():
         logger.info(f'Loading WKV cuda-kernel for {WKVKernel._dtype} and ctx len: {WKVKernel.T_MAX}')
+        import sys
+        
         flags = ['-res-usage',
-                 '--maxrregcount 60',
                  '--use_fast_math',
                  '-O3',
-                 '-Xptxas -O3',
                  '--extra-device-vectorization',
                  f'-DTmax={WKVKernel.T_MAX}']
+        
+        if sys.platform != 'win32':
+            flags += ['--maxrregcount 60',
+                      '-Xptxas -O3']
         extra_flags = [] if WKVKernel._dtype is not t.bfloat16 else ['-t 4', '-std=c++17']
         op_fname = 'cuda/wkv_op' + ('' if WKVKernel._dtype is not t.bfloat16 else '_bf16')
         cuda_fname = 'cuda/wkv_cuda' + ('' if WKVKernel._dtype is not t.bfloat16 else '_bf16')
