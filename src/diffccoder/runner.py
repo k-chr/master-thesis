@@ -6,6 +6,7 @@ from diffccoder.commands.data.process_small_xml import ProcessSmallXMLCommand
 from diffccoder.commands.data.tokenize_files import TokenizeFilesCommand
 from diffccoder.commands.data.train_tokenizer import TrainTokenizerCommand
 from diffccoder.commands.model.run_pretraining import PreTrainingCommand
+from diffccoder.commands.model.run_diffusion_training import DiffTrainingCommand
 from diffccoder.commands.other.generate_template_yamls import GenerateTemplateYamlsCommand
 from diffccoder.commands.other.create_experiment import CreateExperimentCommand
 from diffccoder.commands.other.create_or_clone_run import CreateOrCloneRunCommand
@@ -20,6 +21,7 @@ app.add(ChunkifyLargeTextCommand())
 app.add(TokenizeFilesCommand())
 app.add(TrainTokenizerCommand())
 app.add(PreTrainingCommand())
+app.add(DiffTrainingCommand())
 app.add(GenerateTemplateYamlsCommand())
 app.add(CreateExperimentCommand())
 app.add(CreateOrCloneRunCommand())

@@ -25,4 +25,7 @@ class DiffusionConfig(BaseConfig):
     end_point_scale: float = 2.0
     scale_embedding: bool = False
     inference_sampler: InferenceSamplerType = InferenceSamplerType.DEFAULT
+    ema_beta: float = 0.9999
+    use_ema_at_infer: bool = False
+    update_ema_every: int = 200
     encoder_path: Path | None = None
