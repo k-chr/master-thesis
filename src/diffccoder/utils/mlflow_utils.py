@@ -1,11 +1,14 @@
 from collections import defaultdict
+from dataclasses import asdict
 
 from loguru import logger
-from mlflow import MlflowClient
+from mlflow import MlflowClient, MlflowException
 from mlflow.entities import Run, Metric
 from mlflow.store.tracking.sqlalchemy_store import SqlAlchemyStore, SqlMetric
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+
+from diffccoder.configs.base import BaseConfig
 
 
 def get_sql_session(client: MlflowClient) -> Session:
@@ -14,7 +17,7 @@ def get_sql_session(client: MlflowClient) -> Session:
     
     return store.ManagedSessionMaker()
 
-def get_local_metrics(run: Run, client: MlflowClient, last_remote_metrics: list[Metric] | None = None) -> dict[str, Metric]: 
+def get_local_metrics(run: Run, client: MlflowClient, last_remote_metrics: list[Metric] | None = None) -> dict[str, list[Metric]]: 
 
     with get_sql_session(client) as session:
         run_id = run.info.run_id
@@ -49,10 +52,31 @@ def clean_metrics_from_run(client: MlflowClient, exp_name: str, run_name: str):
     
     with get_sql_session(client) as session:
         local_runs= client.search_runs(experiment_ids=[exp.experiment_id],
-                                                        filter_string=f'attributes.`run_name` ILIKE "{run_name}"')
+                                       filter_string=f'attributes.`run_name` ILIKE "{run_name}"')
 
         if local_runs:
             local_run = local_runs[0]
             logger.success(f"Deleted {session.query(SqlMetric).filter_by(run_uuid=local_run.info.run_id).delete()} row(s)")
         else:
             logger.error(f'Experiment of name: {exp_name} does not have any run of name like: {run_name}')
+            
+def log_config(client: MlflowClient,
+               run_uuid: str,
+               config: BaseConfig,
+               excl_keys: list[str] | None = None,
+               force_update: bool = False):
+    try:
+        local_run= client.get_run(run_uuid)
+        if excl_keys is None:
+            excl_keys = []
+
+        params = local_run.data.params
+        params_logged = 0
+        for k, v in asdict(config).items():
+            if k not in excl_keys and (k not in params or force_update):
+                client.log_param(local_run.info.run_id, k, v)
+                params_logged += 1
+        logger.success(f'Succesfully logged {params_logged} param(s) of provided config: {config.__class__.__name__}.')
+    except Exception as e:
+        logger.error(f'Unable to obtain run entity of {run_uuid} uuid from mlflow server, check if provided properly.')
+        if not isinstance(e, MlflowException): raise(e)
