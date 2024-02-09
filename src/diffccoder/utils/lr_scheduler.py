@@ -91,7 +91,7 @@ class EhnancedCosineSchedulerLR(LRScheduler):
         if not getattr(self, '_get_lr_called_within_step', None):
             warnings.warn('To get the last learning rate computed by the scheduler, '
                           'please use `get_last_lr()`.', UserWarning)
-            self.p
+            
         return [self._eta_min(base_lr) + (base_lr - self._eta_min(base_lr)) * (1 + math.cos(math.pi * self.t_cur / self.t_i)) / 2
                 for base_lr in self.base_lrs]
     
