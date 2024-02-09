@@ -1,14 +1,12 @@
-from dataclasses import dataclass
 from functools import partial
 from random import random
 from typing import Optional
 
-from einops import rearrange, reduce, einsum
+from einops import rearrange, reduce
 import torch as t
 from torch import nn
 from torch.cuda.amp import autocast
 import torch.nn.functional as F
-from tqdm import tqdm
 
 from diffccoder.configs.diffusion_config import DiffusionConfig
 from diffccoder.configs.enums import DiffusionModelType
@@ -22,8 +20,6 @@ from diffccoder.utils.outputs import BlockStateList, DiffusionLosses, DiffusionP
 def identity(x: t.Tensor):
     return x
 
-
- 
 
 class GaussianDiffusion(nn.Module):
     __betas: t.Tensor
@@ -258,7 +254,7 @@ class GaussianDiffusion(nn.Module):
         t0_loss = reduce(t0_loss, 'b s ... -> b s', 'mean')
         
         mse_pre = mse_loss
-        print(t0_mask.shape, t0_loss.shape, mse_loss.shape)
+
         mse_loss = t.where(t0_mask, t0_loss, mse_loss)
         
         x_output = preds.pred_x_start if self.config.objective is DiffusionModelType.START_X else x_start
