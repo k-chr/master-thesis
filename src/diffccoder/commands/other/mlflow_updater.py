@@ -1,4 +1,3 @@
-from collections import defaultdict
 import os
 
 from cleo.commands.command import Command
@@ -7,27 +6,8 @@ from loguru import logger
 import mlflow
 from mlflow.entities import Run, Metric, RunTag
 from mlflow.store.entities import PagedList
-from mlflow.store.tracking.sqlalchemy_store import SqlAlchemyStore, SqlMetric
-from sqlalchemy.orm import Session
 
-def get_local_metrics(run: Run, client: mlflow.MlflowClient, last_remote_metrics: list[Metric] | None = None) -> dict[str, Metric]: 
-    tracking_client = client._tracking_client
-    store: SqlAlchemyStore = tracking_client.store
-    
-    with store.ManagedSessionMaker() as _session:
-        session: Session = _session
-        run_id = run.info.run_id
-        
-        if last_remote_metrics: 
-            return {metric.key:[sql_metric.to_mlflow_entity() for sql_metric in session.query(SqlMetric).filter_by(run_uuid=run_id,
-                key=metric.key).where(SqlMetric.step > metric.step).order_by(SqlMetric.timestamp).all()] for metric in last_remote_metrics}
-        else:
-            d = defaultdict(lambda: [])
-            sql_metrics = session.query(SqlMetric).filter_by(run_uuid=run_id).order_by(SqlMetric.timestamp).all()
-            for sql_metric in sql_metrics:
-                d[sql_metric.key].append(sql_metric.to_mlflow_entity())
-                
-            return d
+from diffccoder.utils.mlflow_utils import get_local_metrics
     
 
 class MlFlowUpdaterCommand(Command):
@@ -53,34 +33,60 @@ class MlFlowUpdaterCommand(Command):
         try:
             remote_client = mlflow.MlflowClient(remote_tracking_uri)
         
-            try:
-                exp_obj = remote_client.get_experiment_by_name(exp_name)
-            except mlflow.MlflowException as ME:
-                remote_client.create_experiment()
-            runs: PagedList[Run] = remote_client.search_runs(experiment_ids=[exp_obj.experiment_id],
+            exp_obj = remote_client.get_experiment_by_name(exp_name)
+            if not exp_obj:
+                remote_exp_id = remote_client.create_experiment(exp_name, local_client.get_experiment_by_name(exp_name).artifact_location)
+            else:
+                remote_exp_id = exp_obj.experiment_id
+            runs: PagedList[Run] = remote_client.search_runs(experiment_ids=[remote_exp_id],
                                                              filter_string=f'attributes.`run_name` ILIKE "{run_name}"')
-            
-            local_run: Run = local_client.search_runs(experiment_ids=[local_client.get_experiment_by_name(exp_name).experiment_id],
-                                                                 filter_string=f'attributes.`run_name` ILIKE "{run_name}"')[0]
+            local_exp = local_client.get_experiment_by_name(exp_name)
+            if local_exp is None:
+                experiment_id = local_client.create_experiment(exp_name)
+            else:
+                experiment_id = local_exp.experiment_id
+            local_runs: PagedList[Run] = local_client.search_runs(experiment_ids=[experiment_id],
+                                                                 filter_string=f'attributes.`run_name` ILIKE "{run_name}"')
+            if local_runs:
+                local_run = local_runs[0]
+            else:
+                local_run = local_client.create_run(experiment_id, start_time=runs[0].info.start_time,  tags=runs[0].data.tags, run_name=run_name)
             if runs:
                 run = runs[0]
             else:
-                run = remote_client.create_run(exp_obj.experiment_id, start_time=local_run.info.start_time, tags=local_run.data.tags, run_name=run_name)
+                run = remote_client.create_run(remote_exp_id, start_time=local_run.info.start_time, tags=local_run.data.tags, run_name=run_name)
                 
             metrics: list[Metric] = run.data._metric_objs
-
+            params: dict[str, str]  = run.data.params
+            
+            logged_params = 0
+            local_params = local_run.data.params
+            for k,v in local_params.items():
+                if not params or k not in params:
+                    remote_client.log_param(run.info.run_id, k, v)
+                    logged_params += 1
+                    
+            if logged_params:
+                logger.success(f'Succesfully logged {logged_params} parameter(s) to remote server')
 
             metrics_to_update = get_local_metrics(local_run, local_client, metrics)
-
+            updated_metrics = 0
             for _metrics in metrics_to_update.values():
                 remote_client.log_batch(run.info.run_id,
                                         tuple(_metrics),
                                         tags=tuple(RunTag(key, value) for key, value in run.data.tags.items()),
                                         synchronous=True)
+                updated_metrics += len(_metrics)
+            
+            if updated_metrics:
+                logger.success(f'Succesfully logged {updated_metrics} metric(s) to remote server')
+            
 
         except Exception as e:
-            logger.error(e)
-            logger.error(f'Couldn\'t send to server {remote_tracking_uri}, closing an attempt to update remote data.')
-            
-            if not isinstance(e, mlflow.MlflowException): raise e
+            logger.error(f'Couldn\'t send metrics to server: {remote_tracking_uri}, closing an attempt to update remote.')
+            if not isinstance(e, mlflow.MlflowException): 
+                logger.error(e)
+                raise e
+            else:
+                logger.error(f'MLFlowException msg: {getattr(e, "message")}')
             

@@ -1,97 +1,40 @@
-import os
+from pathlib import Path
 
 from bitsandbytes.optim import AdamW8bit, Adagrad8bit, Adam8bit
 from lightning import LightningModule
 from lightning.pytorch.callbacks import ModelCheckpoint
+from lightning.pytorch.utilities.rank_zero import rank_zero_only
+from loguru import logger
 import torch as t
-from torch.functional import F
+from torch import nn
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler, StepLR
-from transformers import RwkvForCausalLM, RwkvConfig
-from transformers.models.rwkv.modeling_rwkv import RwkvCausalLMOutput
 
 from diffccoder.configs.enums import LRSchedulerType, OptimizerType
 from diffccoder.configs.optimization_config import OptimizationConfig
-from diffccoder.configs.rwkv_config import RWKVConfig
-from diffccoder.model.rwkv.RWKVCM import RWKVCM
-from diffccoder.model.rwkv.outputs import RWKVOutput
-from diffccoder.utils.l2wrap import L2Wrap
+
 from diffccoder.utils.lr_scheduler import EhnancedCosineSchedulerLR
 from diffccoder.utils.warm_up_scheduler import WarmUpScheduler
 
 
-def map_configs(cfg: RWKVConfig) -> RwkvConfig:
-    return RwkvConfig(vocab_size=cfg.vocab_size,
-                      context_length=cfg.context_length,
-                      hidden_size=cfg.embedding_size,
-                      num_hidden_layers=cfg.num_hidden_layers,
-                      attention_hidden_size=cfg.attention_hidden_size,
-                      intermediate_size=cfg.qk_attention)
-
-
-class PretrainingModule(LightningModule):
-    skip_validation_step: bool = False
-    q: dict[str,list[tuple[ModelCheckpoint, int]]] = {'training':[], 'validation':[]}
-    def __init__(self, optimization_config: OptimizationConfig, config: RWKVConfig, skip_init: bool = False) -> None:
-        super().__init__()
-        self.config = optimization_config
-        self.model_config = config
-        os.environ['CTX_LEN'] = str(config.context_length)
-        os.environ['USE_CACHE'] = str(int(config.use_cache and not self.training))
-        self.__skip_one_step = skip_init
-        self.model = RWKVCM(config, skip_init) if not config.use_hugginface else RwkvForCausalLM(map_configs(config))
-        
-    def training_step(self, batch: t.Tensor, batch_idx: int) -> t.Tensor:
-        loss, _, y = self._process_batch(batch)
-        
-        if self.__skip_one_step:
-            self.__skip_one_step = False
-            self.__stop_checkpointers('training')
-        else:
-            self.__restore_checkpointers('training')
-            self.log('train_loss', loss, on_step=True, prog_bar=True)
-            self.log('train_perplexity', t.exp(loss.mean()), on_step=True, prog_bar=True)
-        
-        return L2Wrap.apply(loss, y.to(self.dtype))
-
-    def validation_step(self, batch: t.Tensor, batch_idx: int) -> t.Tensor:
-        loss, _, _ = self._process_batch(batch)
-        
-        if not self.trainer.sanity_checking and not self.skip_validation_step:
-            self.__restore_checkpointers()
-            self.log('validation_loss', loss)
-            self.log('validation_perplexity', t.exp(loss.mean()))
-        elif self.skip_validation_step:
-            self.__stop_checkpointers()
-            
-            self.skip_validation_step = False
-        return loss
-
-    def __restore_checkpointers(self, mode='validation'):
-        while self.q[mode]:
-            c, k = self.q[mode].pop()
-            c.save_top_k = k
-
-    def __stop_checkpointers(self, mode='validation'):
-        model_checkpoints: list[ModelCheckpoint] = self.trainer.checkpoint_callbacks
-        for model_checkpointer in model_checkpoints:
-            if model_checkpointer.monitor in [f'{mode}_loss', f'{mode}_perplexity']:
-                self.q[mode].append((model_checkpointer, model_checkpointer.save_top_k))
-                model_checkpointer.save_top_k = 0
+class TrainingBase(LightningModule):
+    model: nn.Module
     
-    def _process_batch(self, batch: t.Tensor):
-        _, x, y = batch
-        y = y.to(t.int64)
-        rwkv_out: RWKVOutput | RwkvCausalLMOutput = self.model(x)
+    def __init__(self, optim_config: OptimizationConfig, save_before_training: bool = False) -> None:
+        super().__init__()
+        self.config = optim_config
+        self.__save_before_training = save_before_training
+    
+    def on_train_start(self) -> None:
+        if rank_zero_only.rank == 0 and self.__save_before_training:
+            callback: ModelCheckpoint = next(cb for cb in self.trainer.checkpoint_callbacks if getattr(cb, 'save_last', False))
+            ckpt_dir = Path(callback.dirpath)
+            logger.info(f'Saving initialised module at {(ckpt_dir / "last.ckpt")} ...')
 
-        shift_x_hat = rwkv_out.logits[..., :-1, :].contiguous()
-        shift_y = y[..., 1:].contiguous()
-        
-        loss = F.cross_entropy(shift_x_hat.view(-1, shift_x_hat.size(-1)),
-                               shift_y.view(-1))
-                               
-        return loss, rwkv_out, y
- 
+            self.trainer.save_checkpoint(ckpt_dir / 'last.ckpt')
+            logger.success(f'Saved at: {(ckpt_dir / "last.ckpt")}')
+            self.__save_before_training = False
+
     def configure_optimizers(self) -> dict[str, Optimizer | dict[str, LRScheduler | int | str]] | Optimizer:
         optim_groups = self._compute_optim_groups()
             
@@ -146,26 +89,26 @@ class PretrainingModule(LightningModule):
         match self.config.warmup_scheduler:
             case LRSchedulerType.STEP:
                 to_wrap = StepLR(optimizer=optimizer, 
-                                         step_size=self.config.lr_decay_step_size,
-                                         gamma=self.config.lr_decay_rate)
+                                 step_size=self.config.lr_decay_step_size,
+                                 gamma=self.config.lr_decay_rate)
             case LRSchedulerType.COSINE:
                 to_wrap = EhnancedCosineSchedulerLR(optimizer=optimizer,
-                                                            t_0=self.config.cos_t0,
-                                                            eta_min=self.config.cos_eta_min,
-                                                            lr_decay=self.config.lr_decay_rate,
-                                                            t_decay=self.config.cos_t_decay,
-                                                            lr_lowest_bound_ratio=self.config.cos_lb_ratio,
-                                                            warm_restarts=self.config.cos_warm_restarts)
+                                                    t_0=self.config.cos_t0,
+                                                    eta_min=self.config.cos_eta_min,
+                                                    lr_decay=self.config.lr_decay_rate,
+                                                    t_decay=self.config.cos_t_decay,
+                                                    lr_lowest_bound_ratio=self.config.cos_lb_ratio,
+                                                    warm_restarts=self.config.cos_warm_restarts)
             case _:
                 raise ValueError(f'Unknown scheduler: {self.config.warmup_scheduler}')
 
         return WarmUpScheduler(scheduler_to_wrap=to_wrap,
-                                            warm_up_steps=self.config.warmup_max,
-                                            warm_up_metric=self.config.warmup_metric,
-                                            warm_up_routine=self.config.warmup_routine,
-                                            k=self.config.warmup_k,
-                                            lr_0=self.config.warmup_lr_0,
-                                            get_metric=lambda: self.trainer.global_step)
+                               warm_up_steps=self.config.warmup_max,
+                               warm_up_metric=self.config.warmup_metric,
+                               warm_up_routine=self.config.warmup_routine,
+                               k=self.config.warmup_k,
+                               lr_0=self.config.warmup_lr_0,
+                               get_metric=lambda: self.trainer.global_step)
 
     def __configure_optimizer(self, optim_groups) -> Optimizer:
         match self.config.optimizer:
@@ -247,4 +190,3 @@ class PretrainingModule(LightningModule):
                               "weight_decay": self.config.weight_decay,
                               "my_lr_scale": 1.0}]
         return optim_groups
-    

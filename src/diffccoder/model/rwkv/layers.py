@@ -4,15 +4,17 @@ from typing import Optional
 
 from loguru import logger
 import torch as t
-from torch import nn
+from torch import Tensor, nn
 
 from diffccoder.configs.rwkv_config import RWKVConfig
 from diffccoder.model.kernels.wkv import wkv_cuda as wkv
+from diffccoder.utils.outputs import BlockState, BlockStateList, ChannelMixState, TimeMixState
 
 
 class RWKVTimeMix(t.jit.ScriptModule):
-    def __init__(self, config: RWKVConfig, layer_id: int):
+    def __init__(self, config: RWKVConfig, layer_id: int, cross_att: bool = False):
         super().__init__()
+        self.cross_att = cross_att
         self.layer_id = layer_id
         self.context_length = config.context_length
         self.embedding_size = config.embedding_size
@@ -57,7 +59,7 @@ class RWKVTimeMix(t.jit.ScriptModule):
             self.time_mix_r = nn.Parameter(t.pow(x, 0.5 * ratio_1_to_almost0))
 
     @t.jit.script_method
-    def rkv(self, x: t.Tensor, state: Optional[list[t.Tensor]] = None) -> tuple[t.Tensor, t.Tensor, t.Tensor, Optional[list[t.Tensor]]]:
+    def rkv(self, x: t.Tensor, state: Optional[t.Tensor]) -> tuple[t.Tensor, t.Tensor, t.Tensor, Optional[t.Tensor]]:
         # Mix x with the previous timestep to produce xk, xv, xr
         xk, xv, xr, state = self.time_mix(x, state)
 
@@ -70,40 +72,33 @@ class RWKVTimeMix(t.jit.ScriptModule):
 
         return sr, k, v, state
 
-    def time_mix(self, x: t.Tensor, state: Optional[list[t.Tensor]] = None) -> tuple[t.Tensor, t.Tensor, t.Tensor, Optional[list[t.Tensor]]]:
+    def time_mix(self, x: t.Tensor, state: Optional[t.Tensor] = None) -> tuple[t.Tensor, t.Tensor, t.Tensor, Optional[t.Tensor]]:
         
         if x.size(1) == 1 and state is not None:
-            xx = state[1][:, :, self.layer_id]
+            xx = state
         else:
             xx: t.Tensor = self.time_shift(x)
             if state is not None:
-                xx[:, 0] = state[1][:, :, self.layer_id]
+                xx[:, 0] = state
     
         xk = x * self.time_mix_k + xx * (1 - self.time_mix_k)
         xv = x * self.time_mix_v + xx * (1 - self.time_mix_v)
         xr = x * self.time_mix_r + xx * (1 - self.time_mix_r)
         
-        if state is not None:
-            state[1][:, :, self.layer_id] = x[:, -1]
-        
-        return xk, xv, xr, state
-
-    def forward(self, x: t.Tensor, state: Optional[list[t.Tensor]] = None) -> tuple[t.Tensor, Optional[list[t.Tensor]]]:
+        return xk, xv, xr, x[:, -1] if state is not None else None
+    
+    def forward(self, x: t.Tensor, state: Optional[TimeMixState]) -> tuple[t.Tensor, Optional[TimeMixState]]:
         B, T, C = x.size() # x = (Batch,Time,Channel)
         
-        sr, k, v, s = self.rkv(x, state)
+        sr, k, v, shift_state = self.rkv(x, state.shift_state if state is not None else None)
         
-        l_s = tuple(_s[:, :, self.layer_id] for _s in s[2:]) if s is not None else None
-        att, l_s = wkv(B, T, C, self.time_decay, self.time_first, k, v, l_s)
         
-        if l_s is not None:
-            s[2][:, :, self.layer_id] = l_s[0]
-            s[3][:, :, self.layer_id] = l_s[1]
-            s[4][:, :, self.layer_id] = l_s[2]
+        att, wkv_state = wkv(B, T, C, self.time_decay, self.time_first, k, v, state.wkv_state if state is not None else None, self.cross_att)
+        
         rwkv = sr * att
         rwkv = self.output(rwkv)
         
-        return rwkv, s
+        return rwkv, TimeMixState(shift_state, wkv_state) if wkv_state is not None else None
 
 
 class RWKVChannelMix(t.jit.ScriptModule):
@@ -134,15 +129,14 @@ class RWKVChannelMix(t.jit.ScriptModule):
             self.channel_mix_k = nn.Parameter(t.pow(x, ratio_1_to_almost0))
             self.channel_mix_r = nn.Parameter(t.pow(x, ratio_1_to_almost0))
 
-    @t.jit.script_method
-    def forward(self, x: t.Tensor, state: Optional[list[t.Tensor]] = None) -> tuple[t.Tensor, Optional[list[t.Tensor]]]:
+    def forward(self, x: t.Tensor, state: Optional[ChannelMixState] = None) -> tuple[t.Tensor, Optional[ChannelMixState]]:
         
-        if x.size(1) == 1 and state is not None:
-            xx = state[0][:, :, self.layer_id]
+        if x.size(1) == 1 and state:
+            xx = state.shift_state
         else:
             xx: t.Tensor = self.time_shift(x)
-            if state is not None:
-                xx[:, 0] = state[0][:, :, self.layer_id]
+            if state:
+                xx[:, 0] = state.shift_state
 
         xk = x * self.channel_mix_k + xx * (1 - self.channel_mix_k)
         xr = x * self.channel_mix_r + xx * (1 - self.channel_mix_r)
@@ -150,13 +144,10 @@ class RWKVChannelMix(t.jit.ScriptModule):
         k = self.key(xk)
         k = t.square(t.relu(k))
         kv = self.value(k)
-        
-        if state is not None:
-            state[0][:, :, self.layer_id] = x[:, -1]
             
         rkv = t.sigmoid(self.receptance(xr)) * kv
         
-        return rkv, state
+        return rkv, ChannelMixState(x[:, -1]) if state is not None else None
 
 
 class RWKVBlockBase(nn.Module, abc.ABC):
@@ -176,15 +167,15 @@ class RWKVBlockBase(nn.Module, abc.ABC):
     @abc.abstractmethod
     def _attention(self, x: t.Tensor, state: Optional[list[t.Tensor]] = None) -> tuple[t.Tensor, Optional[list[t.Tensor]]]: ...
     
-    def forward(self, x: t.Tensor, state: Optional[list[t.Tensor]] = None) -> tuple[t.Tensor, Optional[list[t.Tensor]]]:
+    def forward(self, x: t.Tensor, state: Optional[BlockState] = None) -> tuple[t.Tensor, Optional[BlockState]]:
         
         if self.layer_id == 0:
             x = self.ln0(x)        
-        att, state = self._attention(x, state)
+        att, attention_state = self._attention(x, state)
         x = x + att
-        ffn_out, state = self.ffn(self.ln2(x), state)
+        ffn_out, channel_mix_state = self.ffn(self.ln2(x), state.channel_mix_state if state is not None else None)
         x = x + ffn_out
-        return x, state
+        return x, BlockState(attention_state, channel_mix_state) if state is not None else None
 
 
 class RWKVBlock(RWKVBlockBase):
@@ -193,8 +184,8 @@ class RWKVBlock(RWKVBlockBase):
         super().__init__(config=config, layer_id=layer_id)
         self.att = RWKVTimeMix(config, layer_id)
 
-    def _attention(self, x: t.Tensor, state: Optional[list[t.Tensor]] = None) -> tuple[t.Tensor, Optional[list[t.Tensor]]]:
-        return self.att(self.ln1(x), state)
+    def _attention(self, x: t.Tensor, state: Optional[BlockState] = None) -> tuple[t.Tensor, Optional[TimeMixState]]:
+        return self.att(self.ln1(x), state.time_mix_state if state is not None else None)
 
 
 class RWKVFfnPreBlock(RWKVBlockBase):
@@ -203,5 +194,29 @@ class RWKVFfnPreBlock(RWKVBlockBase):
         
         self.ffn_pre = RWKVChannelMix(config=config, layer_id=0)
         
-    def _attention(self, x: t.Tensor, state: Optional[list[t.Tensor]] = None) -> tuple[t.Tensor, Optional[list[t.Tensor]]]:
-        return self.ffn_pre(self.ln1(x), state)
+    def _attention(self, x: t.Tensor, state: Optional[BlockState] = None) -> tuple[t.Tensor, Optional[ChannelMixState]]:
+        return self.ffn_pre(self.ln1(x), state.channel_mix_state if state else None)
+    
+    def forward(self, x: Tensor, state: Optional[BlockState] = None) -> tuple[Tensor, Optional[BlockState]]:
+        if self.layer_id == 0:
+            x = self.ln0(x)        
+        att, channel_mix_state = self._attention(x, state)
+        x = x + att
+        ffn_out, channel_mix_state = self.ffn(self.ln2(x), channel_mix_state)
+        x = x + ffn_out
+        return x, BlockState(state.time_mix_state, channel_mix_state) if state is not None else None
+    
+
+class RWKVSequential(nn.Sequential):
+    def forward(self, x: t.Tensor, state: Optional[BlockStateList]) -> tuple[t.Tensor, Optional[BlockStateList]]:
+        new_state = None
+        if state is None:
+            for module in self:
+                x, _ = module(x, None)
+        else:
+            new_state = BlockStateList.empty_like(state)
+            for module in self:
+                layer_id = getattr(module,'layer_id')
+                x, layer_state = module(x, state[layer_id])
+                new_state[layer_id] = layer_state
+        return x, new_state

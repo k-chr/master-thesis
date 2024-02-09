@@ -346,6 +346,24 @@ files = [
 ]
 
 [[package]]
+name = "beartype"
+version = "0.17.0"
+description = "Unbearably fast runtime type checking in pure Python."
+optional = false
+python-versions = ">=3.8.0"
+files = [
+    {file = "beartype-0.17.0-py3-none-any.whl", hash = "sha256:fa84b77a8d037f2a39c4aa2f3dc71854afc7d79312e55a66b338da68fdd48c60"},
+    {file = "beartype-0.17.0.tar.gz", hash = "sha256:3226fbba8c53b4e698acdb47dcaf3c0640151c4d405618c281e6631f4112947d"},
+]
+
+[package.extras]
+all = ["typing-extensions (>=3.10.0.0)"]
+dev = ["autoapi (>=0.9.0)", "coverage (>=5.5)", "equinox", "mypy (>=0.800)", "numpy", "pandera", "pydata-sphinx-theme (<=0.7.2)", "pytest (>=4.0.0)", "sphinx", "sphinx (>=4.2.0,<6.0.0)", "sphinxext-opengraph (>=0.7.5)", "torch", "tox (>=3.20.1)", "typing-extensions (>=3.10.0.0)"]
+doc-rtd = ["autoapi (>=0.9.0)", "pydata-sphinx-theme (<=0.7.2)", "sphinx (>=4.2.0,<6.0.0)", "sphinxext-opengraph (>=0.7.5)"]
+test-tox = ["equinox", "mypy (>=0.800)", "numpy", "pandera", "pytest (>=4.0.0)", "sphinx", "torch", "typing-extensions (>=3.10.0.0)"]
+test-tox-coverage = ["coverage (>=5.5)"]
+
+[[package]]
 name = "beautifulsoup4"
 version = "4.12.2"
 description = "Screen-scraping library"
@@ -968,6 +986,32 @@ python-versions = "*"
 files = [
     {file = "docopt-0.6.2.tar.gz", hash = "sha256:49b3a825280bd66b3aa83585ef59c4a8c82f2c8a522dbe754a8bc8d08c85c491"},
 ]
+
+[[package]]
+name = "einops"
+version = "0.7.0"
+description = "A new flavour of deep learning operations"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "einops-0.7.0-py3-none-any.whl", hash = "sha256:0f3096f26b914f465f6ff3c66f5478f9a5e380bb367ffc6493a68143fbbf1fd1"},
+    {file = "einops-0.7.0.tar.gz", hash = "sha256:b2b04ad6081a3b227080c9bf5e3ace7160357ff03043cd66cc5b2319eb7031d1"},
+]
+
+[[package]]
+name = "ema-pytorch"
+version = "0.4.2"
+description = "Easy way to keep track of exponential moving average version of your pytorch module"
+optional = false
+python-versions = "*"
+files = [
+    {file = "ema-pytorch-0.4.2.tar.gz", hash = "sha256:a1017c04994151e6d1b93f3e82fd02d828390e01c64a73cf6a302544c0cde4a2"},
+    {file = "ema_pytorch-0.4.2-py3-none-any.whl", hash = "sha256:1734a5be32cd3c56b34ebc8ef54c726e47c14748493bfb71e7bc978ec8a3d9e7"},
+]
+
+[package.dependencies]
+beartype = "*"
+torch = ">=1.6"
 
 [[package]]
 name = "entrypoints"
@@ -5515,4 +5559,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "882a50ad420e722f254d0596367032fd2ba6b04ffdca0b84f2d3d7c7849719d5"
+content-hash = "9409183a2a3a9a5045b65e57c447ced5bd18dae4547301f6dcda8750be1d1256"

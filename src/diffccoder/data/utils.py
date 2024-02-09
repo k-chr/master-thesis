@@ -24,6 +24,17 @@ def get_dir_list_from_file(list_dir_path: Path):
         dirs = [_dir.rstrip() for _dir in list_dir_file.readlines()]
     return dirs
 
+def get_version_from_filename(filename: str, version_sep: str) -> int:
+    rV = 0
+    if filename.find(version_sep) != -1:
+        rV = int(filename.split(version_sep)[1])
+    return rV
+
+def get_last_ckpt_name(ckpt_dir: Path):
+    last_version = max([get_version_from_filename(path.stem, '-v') for path in ckpt_dir.glob('./last*.ckpt')], default=0)
+    last_ckpt_fname = f'last{("" if not last_version else "-v" + str(last_version))}.ckpt'
+    return last_ckpt_fname
+
 def lazy_load(paths: list[Path], read_whole_file: bool = False):
     line: str
     for path in paths:

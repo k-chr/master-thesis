@@ -33,5 +33,23 @@ class ExperimentConfig(BaseConfig):
     use_tensorboard: bool = False
     tensorboard: Path | None = None
     
+    metrics_to_save_cp: list[str] = field(default_factory=lambda:['loss', 'perplexity'])
     metrics_to_log: list[str] = field(default_factory=lambda:['loss', 'perplexity'])
     
+EXCL_KEYS={'metrics_to_log',
+           'metrics_to_save_cp',
+           'use_tensorboard',
+           'tensorboard',
+           'mlflow_enabled',
+           'mlflow_server',
+           'mlflow_run_id',
+           'mlflow_continue_run',
+           'mlflow_run_name',
+           'mlflow_http_timeout',
+           'mlflow_log_to_remote_freq',
+           'exp_root',
+           'work_dir',
+           'data_dir',
+           'checkpoint_dir',
+           'out_dir',
+           'experiment_name'}

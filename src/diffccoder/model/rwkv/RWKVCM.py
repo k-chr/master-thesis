@@ -7,15 +7,8 @@ from torch.functional import F
 
 from diffccoder.configs.rwkv_config import RWKVConfig
 from diffccoder.model.rwkv.initialization import RWKV_Init
-from diffccoder.model.rwkv.layers import RWKVBlock, RWKVFfnPreBlock
-from diffccoder.model.rwkv.outputs import RWKVOutput
-
-
-class RWKVSequential(nn.Sequential):
-    def forward(self, x: t.Tensor, state: Optional[list[t.Tensor]]) -> tuple[t.Tensor, Optional[list[t.Tensor]]]:
-        for module in self:
-            x, state = module(x, state)
-        return x, state
+from diffccoder.model.rwkv.layers import RWKVBlock, RWKVFfnPreBlock, RWKVSequential
+from diffccoder.utils.outputs import BlockStateList, RWKVOutput
 
 
 class RWKV(nn.Module):
@@ -32,24 +25,12 @@ class RWKV(nn.Module):
         self.ln_out = nn.LayerNorm(config.embedding_size)
         self.context_length = config.context_length
         
-    def forward(self, idx: t.Tensor, state: Optional[list[t.Tensor]] = None) -> RWKVOutput:
+    def forward(self, idx: t.Tensor, state: Optional[BlockStateList] = None) -> RWKVOutput:
         idx = idx.to(self.emb.weight.device)
-
-        use_cache = self.config.use_cache if not self.training else False
 
         self.step += 1
         
         x: t.Tensor = self.emb(idx)
-        
-        if use_cache and not state:
-            shape = (x.size(0), self.config.embedding_size, self.config.num_hidden_layers)
-            state = [
-                t.zeros(
-                    *shape, dtype=x.dtype if i <= 1 else t.float32, device=x.device
-                )
-                for i in range(5)
-            ]
-            state[4] -= 1e30
             
         x, state = self.blocks(x, state)
         x = self.ln_out(x)
@@ -81,7 +62,7 @@ class RWKVCM(nn.Module):
     def get_ctx_len(self):
         return self.rwkv.context_length
 
-    def forward(self, idx: t.Tensor, state: Optional[list[t.Tensor]] = None) -> RWKVOutput:
+    def forward(self, idx: t.Tensor, state: Optional[BlockStateList] = None) -> RWKVOutput:
         B, T = idx.size()
         assert T <= self.get_ctx_len(), "Cannot forward, because len(input) > model ctx_len."
         
