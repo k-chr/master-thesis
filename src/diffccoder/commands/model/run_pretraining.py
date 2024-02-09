@@ -5,19 +5,21 @@ from cleo.commands.command import Command
 from cleo.helpers import argument
 from lightning.pytorch.loggers import TensorBoardLogger, CSVLogger
 from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor, ModelSummary
+from lightning.pytorch.utilities.rank_zero import rank_zero_only
 from loguru import logger
 import mlflow as mlflow_client
 import torch as t
 from torchinfo import summary
 
 from diffccoder.configs.base import dump_config, load_config 
-from diffccoder.configs.experiment_config import ExperimentConfig
+from diffccoder.configs.experiment_config import EXCL_KEYS as EXP_EXCL_KEYS, ExperimentConfig
 from diffccoder.configs.optimization_config import OptimizationConfig
 from diffccoder.configs.rwkv_config import RWKVConfig
 from diffccoder.configs.trainer_config import DebugTrainerConfig, TrainerConfig
 from diffccoder.data.npy_data_loader import NPYDataModule
 from diffccoder.data.utils import get_last_ckpt_name
 from diffccoder.lightning_modules.mlflow_distinct_logger import MLFlowDistinctLogger
+from diffccoder.utils.mlflow_utils import log_config
 from diffccoder.utils.task_scheduler import RepeatingScheduler
 from diffccoder.lightning_modules.model_runner import ModelRunner
 from diffccoder.lightning_modules.pretraining.module import PretrainingModule
@@ -126,12 +128,24 @@ class PreTrainingCommand(Command):
         
         try:
             ckpt_dir: Path = exp_config.work_dir / 'artifacts'
-            last_ckpt_fname = get_last_ckpt_name(ckpt_dir)    
+            last_ckpt_fname = get_last_ckpt_name(ckpt_dir)
             
             ckpt_path: Path = ckpt_dir / last_ckpt_fname if not exp_config.from_pretrained else exp_config.from_pretrained
             kwargs = {'ckpt_path':ckpt_path} if ckpt_path.is_file() else {}
             net_module = PretrainingModule(optim_cfg, rwkv_cfg, skip_init=bool(kwargs))
 
+            if rank_zero_only.rank == 0:
+                log_config(mlflow.experiment,
+                           exp_config.mlflow_run_id,
+                           exp_config,
+                           excl_keys=EXP_EXCL_KEYS)
+                log_config(mlflow.experiment,
+                           exp_config.mlflow_run_id,
+                           rwkv_cfg)
+                log_config(mlflow.experiment,
+                           exp_config.mlflow_run_id,
+                           optim_cfg)
+            
             logger.info(f"Summary:\n{summary(net_module.model, (exp_config.batch_size, rwkv_cfg.context_length), dtypes=[t.int64])}")
 
             logger.info(f'Running on: {model_runner.accelerator}; Skipping initialisation?: {bool(kwargs)}')
