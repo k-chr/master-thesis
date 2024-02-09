@@ -1,3 +1,4 @@
+from copy import deepcopy
 import math
 from typing import Any, Callable, Final
 import warnings
@@ -12,7 +13,7 @@ EPS: Final[float] = 1e-8
 
 
 class WarmUpScheduler(LRScheduler):
-    _warm_up_routine: Callable[[int, float], float]
+    _warm_up_routine: Callable[[int, float], float] = lambda *_:0.0
     
     def __init__(self, 
                  scheduler_to_wrap: LRScheduler,
@@ -35,8 +36,10 @@ class WarmUpScheduler(LRScheduler):
         
         self.k = k
         self.warm_up_routine = warm_up_routine
-        self.setup_warm_up()
         super().__init__(scheduler_to_wrap.optimizer, last_epoch, verbose)
+        self.initial_lrs = deepcopy(self.base_lrs)
+        self.base_lrs = [group['initial_lr'] * group.get('my_lr_scale', 1) for group in self.optimizer.param_groups]
+        self.setup_warm_up()
         
     def __linear(self) -> Callable[[int, float], float]:
         a = {lr_base : (lr_base - self.lr_0) / self.warm_up_metric_max for lr_base in self.base_lrs}
@@ -63,12 +66,11 @@ class WarmUpScheduler(LRScheduler):
             case WarmUpRoutine.SIN:
                 self._warm_up_routine = self.__sin()
     
-    def step(self, 
-             epoch: int | None = None) -> None:
+    def step(self, epoch: int | None = None) -> None:
         metric = self.__check_if_metric_exists(self.get_metric(), None)
         self.curr_metric_value = metric
         if metric and self.curr_metric_value >= self.warm_up_metric_max:
-            return self.wrapped_scheduler.step(epoch)
+            self.wrapped_scheduler.step(epoch)
         
         return super().step(epoch)
     
@@ -78,7 +80,7 @@ class WarmUpScheduler(LRScheduler):
                           'please use `get_last_lr()`.', UserWarning)
 
         if self.curr_metric_value is not None and self.curr_metric_value >= self.warm_up_metric_max:
-            return self.wrapped_scheduler.get_lr()
+            return self.wrapped_scheduler.get_last_lr()
         
         return [self._warm_up_routine(self.curr_metric_value, base_lr) for base_lr in self.base_lrs]
 
