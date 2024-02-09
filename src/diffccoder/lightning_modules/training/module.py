@@ -81,7 +81,7 @@ class DiffusionTrainingModule(TrainingBase):
         _, x, y = batch
         y = y.to(t.int64)
         
-        if self.training == False and self.diff_config.use_ema_at_infer:
+        if self.training == False and self.diff_config.use_ema_at_infer and self.__trainer().ema is not None:
             logger.info('Using EMA')
             model: GaussianDiffusion = self.__trainer().ema.ema_model
         else:
@@ -92,6 +92,7 @@ class DiffusionTrainingModule(TrainingBase):
         return diff_out, y
     
     def on_train_start(self) -> None:
+        logger.info('Initialization of EMA parameters...')
         self.__trainer().init_ema(self, self.diff_config)
         
         return super().on_train_start()

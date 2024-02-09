@@ -68,10 +68,17 @@ class PreTrainingCommand(Command):
             
         for metric in exp_config.metrics_to_save_cp:
             monitor = ModelCheckpoint(dirpath=exp_config.work_dir / 'artifacts',
-                                      filename=f'best_on_{metric}',
+                                      filename=f'best_on_val_{metric}',
                                       save_top_k=1,
                                       save_on_train_epoch_end=False,
                                       monitor=f'validation_{metric}',
+                                      save_last=False)
+            _callbacks.append(monitor)
+            monitor = ModelCheckpoint(dirpath=exp_config.work_dir / 'artifacts',
+                                      filename=f'best_on_train_{metric}',
+                                      save_top_k=1,
+                                      save_on_train_epoch_end=False,
+                                      monitor=f'train_{metric}',
                                       save_last=False)
             _callbacks.append(monitor)
 
