@@ -57,15 +57,30 @@ class MlFlowUpdaterCommand(Command):
                 run = remote_client.create_run(remote_exp_id, start_time=local_run.info.start_time, tags=local_run.data.tags, run_name=run_name)
                 
             metrics: list[Metric] = run.data._metric_objs
-
+            params: dict[str, str]  = run.data.params
+            
+            logged_params = 0
+            local_params = local_run.data.params
+            for k,v in local_params.items():
+                if not params or k not in params:
+                    remote_client.log_param(run.info.run_id, k, v)
+                    logged_params += 1
+                    
+            if logged_params:
+                logger.success(f'Succesfully logged {logged_params} parameter(s) to remote server')
 
             metrics_to_update = get_local_metrics(local_run, local_client, metrics)
-
+            updated_metrics = 0
             for _metrics in metrics_to_update.values():
                 remote_client.log_batch(run.info.run_id,
                                         tuple(_metrics),
                                         tags=tuple(RunTag(key, value) for key, value in run.data.tags.items()),
                                         synchronous=True)
+                updated_metrics += len(_metrics)
+            
+            if updated_metrics:
+                logger.success(f'Succesfully logged {updated_metrics} metric(s) to remote server')
+            
 
         except Exception as e:
             logger.error(f'Couldn\'t send metrics to server: {remote_tracking_uri}, closing an attempt to update remote.')
