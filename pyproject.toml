@@ -34,7 +34,6 @@ bitsandbytes = [{url = "https://github.com/jllllll/bitsandbytes-windows-webui/re
                 {version = "^0.41.2.post2", markers = "sys_platform == 'linux'" }]
 torchinfo = "^1.8.0"
 einops = "^0.7.0"
-ema-pytorch = "^0.4.2"
 torch = [{version = "2.3.0.dev20240202+cu118", source = "torch-nightly", markers = "sys_platform == 'win32'"},
          {version = "^2.2.0", source = "torch", markers = "sys_platform == 'linux'"}]
 
