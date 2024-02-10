@@ -134,7 +134,8 @@ class PreTrainingCommand(Command):
                                 logger=_logger,
                                 callbacks=_callbacks,
                                 strategy=DDPStrategy(process_group_backend='gloo',
-                                                     timeout=timedelta(days=1.0)))
+                                                     timeout=timedelta(days=1.0),
+                                                     start_method='popen'))
         if exp_config.mlflow_enabled and rank_zero_only.rank == 0:
 
             command = f'{os.environ["REMOTE_TRACKING_URI"]} {exp_config.experiment_name} {exp_config.mlflow_run_name} -vvv'
@@ -151,8 +152,20 @@ class PreTrainingCommand(Command):
             
             ckpt_path: Path = ckpt_dir / last_ckpt_fname if not exp_config.from_pretrained else exp_config.from_pretrained
             kwargs = {'ckpt_path':ckpt_path} if ckpt_path.is_file() else {}
+            if not kwargs:
+                if not ckpt_dir.exists():
+                    ckpt_dir.mkdir(exist_ok=True)
+                init_path = ckpt_dir / 'init.pt'
+                if model_runner.global_rank == 0:
+                    net_module = PretrainingModule(optim_cfg, rwkv_cfg, skip_init=False)
+                    t.save(net_module.model.state_dict(), init_path)
+                else:
+                    while not  init_path.is_file():...
+                    net_module = PretrainingModule(optim_cfg, rwkv_cfg, skip_init=True)
+                    net_module.model.load_state_dict(t.load(init_path, map_location='cpu'))
+            else:
+                net_module = PretrainingModule(optim_cfg, rwkv_cfg, skip_init=True)
 
-            net_module = PretrainingModule(optim_cfg, rwkv_cfg, skip_init=bool(kwargs))
 
             if rank_zero_only.rank == 0 and exp_config.mlflow_enabled:
                 log_config(mlflow.experiment,
