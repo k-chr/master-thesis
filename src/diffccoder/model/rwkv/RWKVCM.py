@@ -39,7 +39,7 @@ class RWKV(nn.Module):
 
 
 class RWKVCM(nn.Module):
-    def __init__(self, config: RWKVConfig, skip_init: bool =False):
+    def __init__(self, config: RWKVConfig, initialize: bool = False):
         super().__init__()
         self.rwkv = RWKV(config)
         self.head = nn.Linear(config.embedding_size, config.vocab_size, bias=False)
@@ -53,10 +53,8 @@ class RWKVCM(nn.Module):
             self.register_buffer("copy_mask", t.tril(
                 t.ones(config.context_length, config.context_length)))
         self.config = config
-        
-        if not skip_init:
-            RWKV_Init(self, config) 
-
+        if initialize:
+            RWKV_Init(self, config)
         logger.info(f"Number of parameters: {sum(p.numel() for p in self.parameters())}")
     
     def get_ctx_len(self):

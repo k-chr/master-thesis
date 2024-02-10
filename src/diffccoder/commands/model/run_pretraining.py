@@ -1,10 +1,14 @@
+from datetime import timedelta
+from functools import partial
+
 import os
 from pathlib import Path
 
 from cleo.commands.command import Command
 from cleo.helpers import argument
-from lightning.pytorch.loggers import TensorBoardLogger, CSVLogger
 from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor, ModelSummary
+from lightning.pytorch.loggers import TensorBoardLogger, CSVLogger
+from lightning.pytorch.strategies import DDPStrategy
 from lightning.pytorch.utilities.rank_zero import rank_zero_only
 from loguru import logger
 import mlflow as mlflow_client
@@ -25,6 +29,9 @@ from diffccoder.lightning_modules.model_runner import ModelRunner
 from diffccoder.lightning_modules.pretraining.module import PretrainingModule
 
 DEFAULT_RUN_NAME = 'Pre-Training'
+
+def update_mlflow(command: str, name='mlflow-updater'):
+    return os.system(f'poetry run app {name} {command}')
 
 
 class PreTrainingCommand(Command):
@@ -77,7 +84,7 @@ class PreTrainingCommand(Command):
             monitor = ModelCheckpoint(dirpath=exp_config.work_dir / 'artifacts',
                                       filename=f'best_on_train_{metric}',
                                       save_top_k=1,
-                                      save_on_train_epoch_end=False,
+                                      save_on_train_epoch_end=True,
                                       monitor=f'train_{metric}',
                                       save_last=False)
             _callbacks.append(monitor)
@@ -125,23 +132,42 @@ class PreTrainingCommand(Command):
         model_runner = ModelRunner(trainer_config=trainer_cfg,
                                 debug_config=debug_cfg,
                                 logger=_logger,
-                                callbacks=_callbacks)
-        command = f'PLACEHOLDER {os.environ["REMOTE_TRACKING_URI"]} {exp_config.experiment_name} {exp_config.mlflow_run_name} -vvv'
-        
-        r = RepeatingScheduler(function=lambda *_: self.call('mlflow-updater', command),
-                               interval=exp_config.mlflow_log_to_remote_freq)
-        r.daemon = True
-        r.start()
-        
+                                callbacks=_callbacks,
+                                strategy=DDPStrategy(process_group_backend='gloo',
+                                                     timeout=timedelta(days=1.0),
+                                                     start_method='popen'))
+        if exp_config.mlflow_enabled and rank_zero_only.rank == 0:
+
+            command = f'{os.environ["REMOTE_TRACKING_URI"]} {exp_config.experiment_name} {exp_config.mlflow_run_name} -vvv'
+
+            r = RepeatingScheduler(function=partial(update_mlflow, *(command, 'mlflow-updater')),
+                                   interval=exp_config.mlflow_log_to_remote_freq)
+            r.daemon = True
+            r.start()
+            
         try:
+            
             ckpt_dir: Path = exp_config.work_dir / 'artifacts'
             last_ckpt_fname = get_last_ckpt_name(ckpt_dir)
             
             ckpt_path: Path = ckpt_dir / last_ckpt_fname if not exp_config.from_pretrained else exp_config.from_pretrained
             kwargs = {'ckpt_path':ckpt_path} if ckpt_path.is_file() else {}
-            net_module = PretrainingModule(optim_cfg, rwkv_cfg, skip_init=bool(kwargs))
+            if not kwargs:
+                if not ckpt_dir.exists():
+                    ckpt_dir.mkdir(exist_ok=True)
+                init_path = ckpt_dir / 'init.pt'
+                if model_runner.global_rank == 0:
+                    net_module = PretrainingModule(optim_cfg, rwkv_cfg, skip_init=False)
+                    t.save(net_module.model.state_dict(), init_path)
+                else:
+                    while not  init_path.is_file():...
+                    net_module = PretrainingModule(optim_cfg, rwkv_cfg, skip_init=True)
+                    net_module.model.load_state_dict(t.load(init_path, map_location='cpu'))
+            else:
+                net_module = PretrainingModule(optim_cfg, rwkv_cfg, skip_init=True)
 
-            if rank_zero_only.rank == 0:
+
+            if rank_zero_only.rank == 0 and exp_config.mlflow_enabled:
                 log_config(mlflow.experiment,
                            exp_config.mlflow_run_id,
                            exp_config,
@@ -157,5 +183,7 @@ class PreTrainingCommand(Command):
 
             logger.info(f'Running on: {model_runner.accelerator}; Skipping initialisation?: {bool(kwargs)}')
             model_runner.fit(net_module, datamodule=data_module, **kwargs)
+            
         finally:
-            r.cancel()
+            if exp_config.mlflow_enabled and rank_zero_only.rank == 0:
+                r.cancel()

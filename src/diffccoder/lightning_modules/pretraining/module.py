@@ -20,7 +20,7 @@ class PretrainingModule(TrainingBase):
         self.model_config = config
         os.environ['CTX_LEN'] = str(config.context_length)
         os.environ['USE_CACHE'] = str(int(config.use_cache and not self.training))
-        self.model = RWKVCM(config, skip_init)
+        self.model = RWKVCM(config, not skip_init)
  
     def training_step(self, batch: t.Tensor, batch_idx: int) -> t.Tensor:
         loss, _, y = self._process_batch(batch)
@@ -33,8 +33,8 @@ class PretrainingModule(TrainingBase):
     def validation_step(self, batch: t.Tensor, batch_idx: int) -> t.Tensor:
         loss, _, _ = self._process_batch(batch)
         
-        self.log('validation_loss', loss)
-        self.log('validation_perplexity', t.exp(loss.mean()))
+        self.log('validation_loss', loss, sync_dist=True)
+        self.log('validation_perplexity', t.exp(loss.mean()), sync_dist=True)
 
         return loss
     

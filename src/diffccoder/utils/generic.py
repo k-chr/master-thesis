@@ -4,6 +4,11 @@ from typing import Any
 
 import torch as t
 
+def get_dtype(str_type: str):
+    if '32' in str_type: return t.float32
+    elif 'bf16' in str_type: return t.bfloat16
+    else: return t.float16
+
 
 class ModelOutput(OrderedDict):
     """
