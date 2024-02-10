@@ -4,7 +4,7 @@ from dataclasses import asdict
 from loguru import logger
 from mlflow import MlflowClient, MlflowException
 from mlflow.entities import Run, Metric
-from mlflow.store.tracking.sqlalchemy_store import SqlAlchemyStore, SqlMetric
+from mlflow.store.tracking.sqlalchemy_store import SqlAlchemyStore, SqlMetric, SqlParam
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -59,7 +59,24 @@ def clean_metrics_from_run(client: MlflowClient, exp_name: str, run_name: str):
             logger.success(f"Deleted {session.query(SqlMetric).filter_by(run_uuid=local_run.info.run_id).delete()} row(s)")
         else:
             logger.error(f'Experiment of name: {exp_name} does not have any run of name like: {run_name}')
-            
+
+def clean_params_from_run(client: MlflowClient, exp_name: str, run_name: str):
+    exp = client.get_experiment_by_name(exp_name)
+    
+    if not exp:
+        logger.error(f'Experiment of name: {exp_name} does not exist on current MLFlow server')
+        return
+    
+    with get_sql_session(client) as session:
+        local_runs= client.search_runs(experiment_ids=[exp.experiment_id],
+                                       filter_string=f'attributes.`run_name` ILIKE "{run_name}"')
+
+        if local_runs:
+            local_run = local_runs[0]
+            logger.success(f"Deleted {session.query(SqlParam).filter_by(run_uuid=local_run.info.run_id).delete()} row(s)")
+        else:
+            logger.error(f'Experiment of name: {exp_name} does not have any run of name like: {run_name}')
+
 def log_config(client: MlflowClient,
                run_uuid: str,
                config: BaseConfig,
@@ -78,5 +95,5 @@ def log_config(client: MlflowClient,
                 params_logged += 1
         logger.success(f'Succesfully logged {params_logged} param(s) of provided config: {config.__class__.__name__}.')
     except Exception as e:
-        logger.error(f'Unable to obtain run entity of {run_uuid} uuid from mlflow server, check if provided properly.')
+        logger.error(f'Unable to log config to run: {run_uuid} uuid from mlflow server, check if data are provided properly. Message: {getattr(e, "message", "None")}')
         if not isinstance(e, MlflowException): raise(e)
