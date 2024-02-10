@@ -1,10 +1,5 @@
-from pathlib import Path
-
 from bitsandbytes.optim import AdamW8bit, Adagrad8bit, Adam8bit
 from lightning import LightningModule
-from lightning.pytorch.callbacks import ModelCheckpoint
-from lightning.pytorch.utilities.rank_zero import rank_zero_only
-from loguru import logger
 import torch as t
 from torch import nn
 from torch.optim import Optimizer
@@ -12,7 +7,6 @@ from torch.optim.lr_scheduler import LRScheduler, StepLR
 
 from diffccoder.configs.enums import LRSchedulerType, OptimizerType
 from diffccoder.configs.optimization_config import OptimizationConfig
-from diffccoder.utils.generic import get_dtype
 from diffccoder.utils.lr_scheduler import EhnancedCosineSchedulerLR
 from diffccoder.utils.warm_up_scheduler import WarmUpScheduler
 
@@ -24,42 +18,11 @@ class TrainingBase(LightningModule):
         super().__init__()
         self.config = optim_config
         self.__save_before_training = save_before_training
-    
-    def on_fit_start(self) -> None:
-        if not rank_zero_only.rank in [0, -1]:
-            self.trainer.strategy.barrier()
-            logger.info(f'RANK {rank_zero_only.rank} left a barrier')
-        ckpt_dir = self.__get_save_last_path()
-
-        if rank_zero_only.rank == 0:
-            self.save_init_model_release_lock(ckpt_dir)
-
-        if self.__save_before_training and not rank_zero_only.rank in [0, -1]:
-            state_dict: dict[str, nn.Parameter | t.Tensor] = t.load(ckpt_dir / 'last.ckpt')['state_dict']
-            model_weights = {k[len('model.'):]: v.to(dtype=get_dtype(self.trainer.precision)) for k, v in state_dict.items() if k.startswith('model.')}
-            self.model.load_state_dict(model_weights)
-
-        self.__save_before_training = False
-
-    def save_init_model_release_lock(self, ckpt_dir: Path):
-
-        if rank_zero_only.rank == 0 and self.__save_before_training:
-            logger.info(f'Saving initialised module at {(ckpt_dir / "last.ckpt")} ...')
-
-            self.trainer.save_checkpoint(ckpt_dir / 'last.ckpt')
-            logger.success(f'Saved at: {(ckpt_dir / "last.ckpt")}')
-            self.trainer.strategy.barrier()
-        elif rank_zero_only.rank == 0:
-            self.trainer.strategy.barrier()
-
+ 
     @property
     def save_before_training(self):
         return self.__save_before_training
     
-    def __get_save_last_path(self):
-        callback: ModelCheckpoint = next(cb for cb in self.trainer.checkpoint_callbacks if getattr(cb, 'save_last', False))
-        return Path(callback.dirpath)
-
     def configure_optimizers(self) -> dict[str, Optimizer | dict[str, LRScheduler | int | str]] | Optimizer:
         optim_groups = self._compute_optim_groups()
             
