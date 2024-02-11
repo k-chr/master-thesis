@@ -33,8 +33,8 @@ class PretrainingModule(TrainingBase):
     def validation_step(self, batch: t.Tensor, batch_idx: int) -> t.Tensor:
         loss, _, _ = self._process_batch(batch)
         
-        self.log('validation_loss', loss, sync_dist=True)
-        self.log('validation_perplexity', t.exp(loss.mean()), sync_dist=True)
+        self.log('validation_loss', loss)
+        self.log('validation_perplexity', t.exp(loss.mean()))
 
         return loss
     

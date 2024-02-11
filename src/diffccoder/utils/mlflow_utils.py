@@ -21,17 +21,11 @@ def get_local_metrics(run: Run, client: MlflowClient, last_remote_metrics: list[
 
     with get_sql_session(client) as session:
         run_id = run.info.run_id
+        local = {obj[0]: -1 for obj in session.query(SqlMetric.key).filter_by(run_uuid=run_id).distinct().all()}
+        local.update({metric.key:metric.step for metric in last_remote_metrics})
         
-        if last_remote_metrics: 
-            return {metric.key:[sql_metric.to_mlflow_entity() for sql_metric in session.query(SqlMetric).filter_by(run_uuid=run_id,
-                key=metric.key).where(SqlMetric.step > metric.step).order_by(SqlMetric.timestamp).all()] for metric in last_remote_metrics}
-        else:
-            d = defaultdict(lambda: [])
-            sql_metrics = session.query(SqlMetric).filter_by(run_uuid=run_id).order_by(SqlMetric.timestamp).all()
-            for sql_metric in sql_metrics:
-                d[sql_metric.key].append(sql_metric.to_mlflow_entity())
-                
-            return d
+        return {key:[sql_metric.to_mlflow_entity() for sql_metric in session.query(SqlMetric).filter_by(run_uuid=run_id,
+                key=key).where(SqlMetric.step > step).order_by(SqlMetric.timestamp).all()] for key, step in local.items()}
         
 def get_last_logged_step(run: Run, client: MlflowClient) -> int | None:
     with get_sql_session(client) as session:

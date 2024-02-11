@@ -59,8 +59,8 @@ class MLFlowDistinctLogger(MLFlowLogger):
                 
             if last_steps[k] is None or last_steps[k] < step:
                 metrics_list.append(Metric(key=k, value=v, timestamp=timestamp_ms, step=step))
-            # else:
-            #     logger.debug(f'last_steps[{k}]={last_steps[k]}, step={step}')   
+            else:
+                logger.debug(f'key-{k}, last_steps[{k}]={last_steps[k]}, step={step}')   
         if metrics_list:
             client.log_batch(run_id=self.run_id, metrics=metrics_list)
             logger.debug(f'Updated: {len(metrics_list)} metric(s)')
