@@ -103,7 +103,7 @@ class NPYCLMDataset(Dataset):
         logger.debug(f"Index obj {index} of type: {index.__class__}")
         by_upper = attrgetter('upper')
         obj = self.upper_limits[bisect(self.upper_limits, index, key=by_upper)]
-        logger.info(f"For index: {index} found: {obj}")
+        logger.debug(f"For index: {index} found: {obj}")
         
         arr: np.ndarray = self.mmaps[obj.index][index-obj.lower]
         data: t.Tensor = t.from_numpy(arr.astype(np.uint16).astype(np.int32))
