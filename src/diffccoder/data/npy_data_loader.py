@@ -1,7 +1,9 @@
+from bisect import bisect
+from dataclasses import dataclass
+from operator import attrgetter
 from pathlib import Path
 
-import dask.array as da
-from dask.array.core import Array
+from loguru import logger
 from lightning.pytorch import LightningDataModule
 import numpy as np
 import torch as t
@@ -58,6 +60,12 @@ class NPYDataModule(LightningDataModule):
     def prepare_data(self) -> None:
         return super().prepare_data()
 
+@dataclass
+class MMapLimit:
+    lower: int
+    upper: int
+    index: int
+
 
 class NPYCLMDataset(Dataset):
     def __init__(self, in_dir: Path, sub_dir_list_file: Path, precision: t.dtype=t.float32) -> None:
@@ -66,17 +74,38 @@ class NPYCLMDataset(Dataset):
 
         dir_list = get_dir_list_from_file(list_dir_path=sub_dir_list_file)
 
-        mmaps: list[np.memmap] = [np.load(in_dir / npy_dir / 'data.npy', mmap_mode='r+') for npy_dir in dir_list]
+        self.mmaps: list[np.memmap] = [np.load(in_dir / npy_dir / 'data.npy', mmap_mode='r+') for npy_dir in dir_list]
 
-        self.mmap: Array = da.concatenate(mmaps)
+        #self.mmap: Array = da.concatenate(self.mmaps)
+        
+        self.upper_limits:list[MMapLimit] = []
+        running_sum = 0
+        self.__cols = 0
+        self.__dtype: np.dtype = None
+        for i, mmap in enumerate(self.mmaps):
+            if not self.__cols:
+                self.__cols = mmap.shape[1]
+            if not self.__dtype:
+                self.__dtype: np.dtype = mmap.dtype
+            rows = mmap.shape[0]
+            _lower = running_sum
+            running_sum += rows
+            self.upper_limits.append(MMapLimit(_lower, running_sum-1, i))
+        
         self.precision = precision
-        self.__len = self.mmap.shape[0] #shape is cached-property, so as a result it is 'tuple' not 'callable' in runtime
-
+        self.__rows = running_sum #shape is cached-property, so as a result it is 'tuple' not 'callable' in runtime
+        logger.info(f"Dataset consists of {self.__rows * self.__cols * self.__dtype.itemsize} bytes, num of lines: {self.__rows}, num of cols: {self.__cols}, dtype: {self.__dtype}")
+        
     def __len__(self):
-        return self.__len
+        return self.__rows
     
     def __getitem__(self, index) -> tuple[int, t.Tensor, t.Tensor]:
-        arr: np.ndarray = self.mmap[index].compute()
+        logger.debug(f"Index obj {index} of type: {index.__class__}")
+        by_upper = attrgetter('upper')
+        obj = self.upper_limits[bisect(self.upper_limits, index, key=by_upper)]
+        logger.info(f"For index: {index} found: {obj}")
+        
+        arr: np.ndarray = self.mmaps[obj.index][index-obj.lower]
         data: t.Tensor = t.from_numpy(arr.astype(np.uint16).astype(np.int32))
 
         x, y = data, data.clone()
