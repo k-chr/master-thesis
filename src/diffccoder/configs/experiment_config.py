@@ -15,6 +15,7 @@ class ExperimentConfig(BaseConfig):
     pin_memory: bool = True
     number_of_workers: int = 1
     split_val_ratio: float = 0.2
+    seed: int | None = None
     
     exp_root: Path = Path.home() / 'exp'
     work_dir: Path | None = None
