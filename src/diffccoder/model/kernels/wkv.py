@@ -203,6 +203,51 @@ class WKV(Function):
         gw = t.sum(gw, dim=0)
         gu = t.sum(gu, dim=0)
         return (None, None, None, cast(gw, WKVKernel._dtype), cast(gu, WKVKernel._dtype), cast(gk, WKVKernel._dtype), cast(gv, WKVKernel._dtype), None) 
+    
+def rwkv_linear_attention_cpu(time_decay: t.Tensor, time_first: t.Tensor, key: t.Tensor, value: t.Tensor, state=None, return_state=False):
+    # For CPU fallback. Will be slower and probably take more memory than the custom CUDA kernel if not executed
+    # within a torch.no_grad.
+    _, seq_length, _ = key.size()
+    output = t.zeros_like(key)
+
+    if state is None:
+        num_state = t.zeros_like(key[:, 0], dtype=t.float32)
+        den_state = t.zeros_like(key[:, 0], dtype=t.float32)
+        max_state = t.zeros_like(key[:, 0], dtype=t.float32) - 1e38
+    else:
+        num_state, den_state, max_state = state[:, :, 0], state[:, :, 1], state[:, :, 2]
+
+
+    time_decay = -t.exp(time_decay)
+
+    for current_index in range(seq_length):
+        current_key = key[:, current_index].float()
+        current_value = value[:, current_index]
+
+        # wkv computation at time t
+        max_for_output = t.maximum(max_state, current_key + time_first)
+        e1 = t.exp(max_state - max_for_output)
+        e2 = t.exp(current_key + time_first - max_for_output)
+        numerator = e1 * num_state + e2 * current_value
+        denominator = e1 * den_state + e2
+        output[:, current_index] = (numerator / denominator).to(output.dtype)
+
+        # Update state for next iteration
+        max_for_state = t.maximum(max_state + time_decay, current_key)
+        e1 = t.exp(max_state + time_decay - max_for_state)
+        e2 = t.exp(current_key - max_for_state)
+        num_state = e1 * num_state + e2 * current_value
+        den_state = e1 * den_state + e2
+        max_state = max_for_state
+
+    if return_state or state is not None:
+        if state is None:
+            state = t.empty(*key[:, 0].shape, 3)
+        state[:, :, 0] = num_state
+        state[:, :, 1] = den_state
+        state[:, :, 2] = max_state
+
+    return output, state
 
 def wkv_cuda(B: int,
              T: int,
@@ -213,7 +258,10 @@ def wkv_cuda(B: int,
              v: t.Tensor,
              s: t.Tensor = None, 
              cross_att = False):
-    if not WKVKernel.state():
+    if t.cuda.is_available() and not WKVKernel.state():
        WKVKernel.load() 
+    if not t.cuda.is_available() or any([tensor.device.type == 'cpu' for tensor in (w, u, k, v)]):
+        return rwkv_linear_attention_cpu(w, u, k, v, s, cross_att)
+
     func_cls: Function = StateWKV if cross_att else WKV
     return func_cls.apply(B, T, C, w.cuda(), u.cuda(), k.cuda(), v.cuda(), s.cuda() if s is not None else s)

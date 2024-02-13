@@ -6,9 +6,9 @@ from pathlib import Path
 
 from loguru import logger
 from lightning.pytorch import LightningDataModule
+from lightning.pytorch.utilities.rank_zero import rank_zero_only
 import numpy as np
 import torch as t
-import torch.distributed as dist
 from torch.utils.data import DataLoader, Dataset, random_split
 
 from diffccoder.data.utils import get_dir_list_from_file, partition_dataset
@@ -92,7 +92,7 @@ class NPYCLMDataset(Dataset):
             rows = mmap.shape[0]
             _lower = running_sum
             running_sum += rows
-            self.upper_limits.append(MMapLimit(_lower, running_sum-1, i))
+            self.upper_limits.append(MMapLimit(_lower, running_sum, i))
         
         self.precision = precision
         self.__rows = running_sum #shape is cached-property, so as a result it is 'tuple' not 'callable' in runtime
@@ -104,23 +104,33 @@ class NPYCLMDataset(Dataset):
                                                    num_partitions=int(os.environ['EXP_DEVICES']),
                                                    shuffle=True,
                                                    seed=int(os.environ['DIFFCCODER_SEED']),
-                                                   drop_last=True)[dist.get_rank() if dist.is_initialized() else 0]
+                                                   drop_last=True)
         
-        
+            logger.info(f'RANK {getattr(rank_zero_only, "rank", 0)}, num of unique indices in partitions {set(sum([vec for vec in self._part_indices],start=[])).__len__()}')
     def __len__(self):
-        return len(self._part_indices) if int(os.environ.get('EXP_DEVICES', '1')) > 1 else self.__rows
+        return len(self._part_indices[getattr(rank_zero_only, 'rank', 0)]) if int(os.environ.get('EXP_DEVICES', '1')) > 1 else self.__rows
     
     def __getitem__(self, index) -> tuple[int, t.Tensor, t.Tensor]:
         if not int(os.environ['EXP_DEVICES']) > 1:
-            logger.debug(f"Index obj {index} of type: {index.__class__} Dataset consists of {self._part_indices.__len__() * self.__cols * self.__dtype.itemsize} bytes,")
-
+            logger.debug(f"RANK: {rank_zero_only.rank} Index obj {index} of type: {index.__class__} Dataset consists of {self._part_indices.__len__() * self.__cols * self.__dtype.itemsize} bytes,")
+            _index = index
         if int(os.environ['EXP_DEVICES']) > 1:
-            index = self._part_indices[index]
+
+            _index = self._part_indices[rank_zero_only.rank][index]
         
         by_upper = attrgetter('upper')
-        obj = self.upper_limits[bisect(self.upper_limits, index, key=by_upper)]
-        
-        arr: np.ndarray = self.mmaps[obj.index][index-obj.lower]
+        try:
+            _id = bisect(self.upper_limits, _index, key=by_upper)
+
+            obj = self.upper_limits[_id]
+        except IndexError as _:
+            logger.info(f'RANK: {rank_zero_only.rank} Worker: For _index: {_index}, index: {index} found _id: {_id}')
+            raise IndexError(f'RANK: {rank_zero_only.rank} Num partitions = {len(self._part_indices)}: For _index: {_index}, index: {index} found _id: {_id}')
+        try:
+            arr: np.ndarray = self.mmaps[obj.index][_index-obj.lower]
+        except IndexError as _:
+            logger.info(f'RANK: {rank_zero_only.rank} For _index: {_index}, index: {index} found obj: {obj}')
+            raise IndexError(f'RANK: {rank_zero_only.rank} For _index: {_index}, index: {index} found obj: {obj}')
         data: t.Tensor = t.from_numpy(arr.astype(np.uint16))
 
         x, y = data, data.clone()
