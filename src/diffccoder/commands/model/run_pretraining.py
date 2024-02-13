@@ -54,7 +54,7 @@ class PreTrainingCommand(Command):
         rwkv_cfg: RWKVConfig = load_config(config_dir / 'rwkvconfig.yaml')
         
         if exp_config.seed is None:
-            seed = np_rand.randint(int(2**32 - 1))
+            seed = np_rand.randint(int(2**31))
             logger.info(f'Setting experiment random seed to: {seed}')
             exp_config.seed = seed
             
