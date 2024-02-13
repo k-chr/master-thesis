@@ -1,6 +1,5 @@
 from datetime import timedelta
 from functools import partial
-
 import os
 from pathlib import Path
 
@@ -12,6 +11,7 @@ from lightning.pytorch.strategies import DDPStrategy
 from lightning.pytorch.utilities.rank_zero import rank_zero_only
 from loguru import logger
 import mlflow as mlflow_client
+import numpy.random as np_rand
 import torch as t
 from torchinfo import summary
 
@@ -19,7 +19,7 @@ from diffccoder.configs.base import dump_config, load_config
 from diffccoder.configs.experiment_config import EXCL_KEYS as EXP_EXCL_KEYS, ExperimentConfig
 from diffccoder.configs.optimization_config import OptimizationConfig
 from diffccoder.configs.rwkv_config import RWKVConfig
-from diffccoder.configs.trainer_config import DebugTrainerConfig, TrainerConfig
+from diffccoder.configs.trainer_config import DebugTrainerConfig, TrainerConfig, get_auto_devices
 from diffccoder.data.npy_data_loader import NPYDataModule
 from diffccoder.data.utils import get_last_ckpt_name
 from diffccoder.lightning_modules.mlflow_distinct_logger import MLFlowDistinctLogger
@@ -47,6 +47,28 @@ class PreTrainingCommand(Command):
         exp_config_path = Path(self.argument('pretraining-yaml'))
         exp_config: ExperimentConfig = load_config(exp_config_path)
         config_dir = exp_config.work_dir / 'configs'
+        
+        trainer_cfg: TrainerConfig = load_config(config_dir / 'trainerconfig.yaml')     
+        debug_cfg: DebugTrainerConfig = load_config(p) if (p := Path(config_dir / 'debugtrainerconfig.yaml')).is_file() else None
+        optim_cfg: OptimizationConfig = load_config(config_dir / 'optimizationconfig.yaml')
+        rwkv_cfg: RWKVConfig = load_config(config_dir / 'rwkvconfig.yaml')
+        
+        if exp_config.seed is None:
+            seed = np_rand.randint(-int(2**31)+1, int(2**31))
+            logger.info(f'Setting experiment random seed to: {seed}')
+            exp_config.seed = seed
+            
+            dump_config(exp_config, config_dir)
+        
+        if os.environ.get('DIFFCCODER_SEED', None) is None:
+            os.environ['DIFFCCODER_SEED'] = str(exp_config.seed)
+        
+        if os.environ.get('EXP_DEVICES', None) is None:
+            os.environ['EXP_DEVICES'] = str(trainer_cfg.devices if isinstance(trainer_cfg.devices, int) else get_auto_devices(trainer_cfg))
+            
+        if os.environ.get('DTYPE', None) is None:
+            os.environ['DTYPE'] = str(trainer_cfg.precision)
+        
         dirlist_txt = Path(self.argument('pre-train-dirlist.txt'))
         data_module = NPYDataModule(in_dir=exp_config.data_dir,
                                     dir_list_txt=dirlist_txt,
@@ -55,16 +77,9 @@ class PreTrainingCommand(Command):
                                     num_workers=exp_config.number_of_workers,
                                     batch_size=exp_config.batch_size,
                                     val_batch_size=exp_config.val_batch_size)
-        
-        trainer_cfg: TrainerConfig = load_config(config_dir / 'trainerconfig.yaml')      
-        debug_cfg: DebugTrainerConfig = load_config(p) if (p := Path(config_dir / 'debugtrainerconfig.yaml')).is_file() else None
-        optim_cfg: OptimizationConfig = load_config(config_dir / 'optimizationconfig.yaml')
-        rwkv_cfg: RWKVConfig = load_config(config_dir / 'rwkvconfig.yaml')
-        
+                
         _logger = []
         _callbacks = []
-        
-        os.environ['DTYPE'] = str(trainer_cfg.precision)
         
         last = ModelCheckpoint(dirpath=exp_config.work_dir / 'artifacts',
                                save_top_k=0,
@@ -104,7 +119,7 @@ class PreTrainingCommand(Command):
                 with mlflow_client.start_run(run_name=exp_config.mlflow_run_name or DEFAULT_RUN_NAME) as run:
                     exp_config.mlflow_run_name = run.info.run_name
                     exp_config.mlflow_run_id = run.info.run_id
-                    dump_config(exp_config, exp_config_path)
+                    dump_config(exp_config, config_dir)
                 
             mlflow = MLFlowDistinctLogger(experiment_name=exp_config.experiment_name,
                                   run_name=exp_config.mlflow_run_name,
