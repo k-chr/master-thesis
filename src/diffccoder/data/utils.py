@@ -1,7 +1,8 @@
+import math
 from pathlib import Path
 
 from loguru import logger
-
+import numpy as np
 
 def save_chunk(stem: str,
                out_dir: Path,
@@ -47,3 +48,45 @@ def lazy_load(paths: list[Path], read_whole_file: bool = False):
                 while line := f.readline():
                     yield line.rstrip()
                     
+def partition_dataset(data_len: int,
+                      num_partitions: int | None = None,
+                      shuffle: bool = False,
+                      seed: int = 0,
+                      drop_last: bool = False) -> list[list[int]]:
+   
+    indices = []
+
+    root_indices = list(range(data_len))
+    
+    if shuffle:
+        # deterministically shuffle based on fixed seed for every process
+        rs = np.random.RandomState(seed)
+        
+        rs.shuffle(root_indices)
+
+    if not num_partitions:
+        raise ValueError("must specify number of partitions or ratios.")
+    
+    if data_len < num_partitions:
+        raise RuntimeError(f"there is no enough data to be split into {num_partitions} partitions.")
+
+    if drop_last and data_len % num_partitions != 0:
+        # split to nearest available length that is evenly divisible
+        num_samples = math.ceil((data_len - num_partitions) / num_partitions)
+    else:
+        num_samples = math.ceil(data_len / num_partitions)
+    # use original data length if not even divisible
+    total_size = num_samples * num_partitions
+
+    if not drop_last and total_size - data_len > 0:
+        # add extra samples to make it evenly divisible
+        root_indices += root_indices[: (total_size - data_len)]
+    else:
+        # remove tail of data to make it evenly divisible
+        root_indices = root_indices[:total_size]
+
+    for i in range(num_partitions):
+        _indices = root_indices[i:total_size:num_partitions]
+        indices.append(_indices)
+
+    return indices
