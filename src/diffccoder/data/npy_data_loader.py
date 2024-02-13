@@ -39,14 +39,16 @@ class NPYDataModule(LightningDataModule):
                    shuffle=True,
                    num_workers=self.num_workers,
                    batch_size=self.batch_size,
-                   pin_memory=self.use_pinned_mem)
+                   pin_memory=self.use_pinned_mem,
+                   persistent_workers=True)
 
     def val_dataloader(self) -> DataLoader:
         return DataLoader(self.npy_val,
                    shuffle=False,
                    num_workers=self.num_workers,
                    batch_size=self.val_batch_size,
-                   pin_memory=self.use_pinned_mem)
+                   pin_memory=self.use_pinned_mem,
+                   persistent_workers=True)
 
     def setup(self, stage: str) -> None:
         if stage == "fit" or stage is None:
@@ -97,30 +99,29 @@ class NPYCLMDataset(Dataset):
         
         logger.info(f"Dataset consists of {self.__rows * self.__cols * self.__dtype.itemsize} bytes, num of lines: {self.__rows}, num of cols: {self.__cols}, dtype: {self.__dtype}")
         
-        if dist.is_initialized() and dist.get_world_size() > 1:
+        if int(os.environ['EXP_DEVICES']) > 1:
             self._part_indices = partition_dataset(data_len=self.__rows,
-                                                   num_partitions=os.environ['EXP_DEVICES'],
+                                                   num_partitions=int(os.environ['EXP_DEVICES']),
                                                    shuffle=True,
                                                    seed=int(os.environ['DIFFCCODER_SEED']),
-                                                   drop_last=True)[dist.get_rank()]
+                                                   drop_last=True)[dist.get_rank() if dist.is_initialized() else 0]
         
         
     def __len__(self):
-        return self.__rows if int(os.environ.get('EXP_DEVICES', '1')) == 1 else len(self._part_indices)
+        return len(self._part_indices) if int(os.environ.get('EXP_DEVICES', '1')) > 1 else self.__rows
     
     def __getitem__(self, index) -> tuple[int, t.Tensor, t.Tensor]:
-        
-        if dist.is_initialized() and dist.get_world_size() > 1:
+        if not int(os.environ['EXP_DEVICES']) > 1:
+            logger.debug(f"Index obj {index} of type: {index.__class__} Dataset consists of {self._part_indices.__len__() * self.__cols * self.__dtype.itemsize} bytes,")
+
+        if int(os.environ['EXP_DEVICES']) > 1:
             index = self._part_indices[index]
-        
-        logger.debug(f"Index obj {index} of type: {index.__class__}")
         
         by_upper = attrgetter('upper')
         obj = self.upper_limits[bisect(self.upper_limits, index, key=by_upper)]
-        logger.debug(f"For index: {index} found: {obj}")
         
         arr: np.ndarray = self.mmaps[obj.index][index-obj.lower]
-        data: t.Tensor = t.from_numpy(arr.astype(np.uint16).astype(np.int32))
+        data: t.Tensor = t.from_numpy(arr.astype(np.uint16))
 
         x, y = data, data.clone()
 

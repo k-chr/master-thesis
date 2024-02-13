@@ -41,7 +41,7 @@ class PretrainingModule(TrainingBase):
     def _process_batch(self, batch: t.Tensor):
         _, x, y = batch
         y = y.to(t.int64)
-        rwkv_out: RWKVOutput = self.model(x)
+        rwkv_out: RWKVOutput = self.model(x.int())
 
         shift_x_hat = rwkv_out.logits[..., :-1, :].contiguous()
         shift_y = y[..., 1:].contiguous()

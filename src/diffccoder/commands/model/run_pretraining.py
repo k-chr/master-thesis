@@ -150,7 +150,8 @@ class PreTrainingCommand(Command):
                                 callbacks=_callbacks,
                                 strategy=DDPStrategy(process_group_backend='gloo',
                                                      timeout=timedelta(days=1.0),
-                                                     start_method='popen'))
+                                                     start_method='popen'),
+                                use_distributed_sampler = False)
         if exp_config.mlflow_enabled and rank_zero_only.rank == 0:
 
             command = f'{os.environ["REMOTE_TRACKING_URI"]} {exp_config.experiment_name} {exp_config.mlflow_run_name} -vvv'
