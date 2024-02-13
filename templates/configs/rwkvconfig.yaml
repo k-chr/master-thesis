@@ -1,12 +1,12 @@
 !RWKVConfig
     attention_hidden_size: null
     bos_token_id: 0
-    context_length: 512
-    embedding_size: 2048
+    context_length: 1024
+    embedding_size: 768
     eos_token_id: 0
     intermediate_size: null
     layer_norm_epsilon: 1.0e-05
-    num_hidden_layers: 16
+    num_hidden_layers: 12
     qk_attention: 0
     rescale_every: 6
     tie_word_embeddings: false

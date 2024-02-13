@@ -1,11 +1,26 @@
 !DiffusionConfig
-    ddim_sample: false
+    beta_sampler: !BetaSchedule
+        value: cosine
+    ddim_eta: 0
+    ema_beta: 0.9999
+    encoder_path: null
+    end_point_scale: 2.0
     gen_timesteps: 3000
-    infer_self_condition: false
-    mode: s2s
-    pred_len: -1
-    predict_xstart: true
+    inference_sampler: !InferenceSamplerType
+        value: default
+    min_snr_gamma: 5
+    min_snr_loss_weight: false
+    objective: !DiffusionModelType
+        value: noise
+    offset_noise_strength: 0.1
     rescale_timesteps: false
-    schedule_sampler: cosine
-    skip_sample: false
-    skip_timestep: 1000
+    scale_embedding: false
+    self_condition: false
+    skip_timesteps: 1000
+    tgt_len: 1024
+    time_att: true
+    time_channels: 512
+    time_dropout: 0.2
+    timesteps: 3000
+    update_ema_every: 200
+    use_ema_at_infer: false

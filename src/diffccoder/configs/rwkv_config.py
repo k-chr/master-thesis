@@ -20,8 +20,6 @@ class RWKVConfig(BaseConfig):
     rescale_every: int = 6
     tie_word_embeddings: bool = False
     use_cache: bool = True
-    use_hugginface: bool = False
-    use_original_impl: bool = False
 
 
 def map_configs(cfg: RWKVConfig) -> RwkvConfig:

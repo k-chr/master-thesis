@@ -1,8 +1,10 @@
 from dataclasses import dataclass
+import multiprocessing as mp
 from pathlib import Path
 from typing import Literal
 
 from lightning.pytorch.trainer.connectors.accelerator_connector import _PRECISION_INPUT
+import torch as t
 
 from diffccoder.configs.base import BaseConfig
 
@@ -38,3 +40,18 @@ class DebugTrainerConfig(BaseConfig):
     limit_predict_batches: int | float | None = None
     num_sanity_val_steps: int | None = None
     
+    
+def get_auto_devices(trainer_cfg: TrainerConfig):
+    match trainer_cfg.accelerator:
+        case 'gpu':
+            if t.cuda.is_available():
+                return t.cuda.device_count()
+        
+        case 'cpu':
+            return mp.cpu_count
+        
+        case 'auto':
+            return t.cuda.device_count() if t.cuda.is_available() else mp.cpu_count
+        
+        case _:
+            return NotImplementedError('IPU and TPU is not supported currently')
