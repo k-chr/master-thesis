@@ -102,8 +102,7 @@ class NPYCLMDataset(Dataset):
                                                    num_partitions=os.environ['EXP_DEVICES'],
                                                    shuffle=True,
                                                    seed=int(os.environ['DIFFCCODER_SEED']),
-                                                   drop_last=True,
-                                                   even_divisible=True)[dist.get_rank()]
+                                                   drop_last=True)[dist.get_rank()]
         
         
     def __len__(self):
