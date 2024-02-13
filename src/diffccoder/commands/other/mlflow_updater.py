@@ -26,6 +26,9 @@ class MlFlowUpdaterCommand(Command):
 
         remote_tracking_uri = self.argument('remote-uri')
         logger.debug(f'Remote: {remote_tracking_uri}, Experiment: {exp_name}, Run: {run_name}')
+        
+        if os.environ.get('MLFLOW_HTTP_REQUEST_TIMEOUT', None) is None:
+            os.environ['MLFLOW_HTTP_REQUEST_TIMEOUT'] = os.environ.get('DEFAULT_MLFLOW_HTTP_REQUEST_TIMEOUT', '1200')
 
         local_tracking_uri = os.environ['MLFLOW_TRACKING_URI'] #default to sqlite:///mlruns.db
         local_client = mlflow.MlflowClient(local_tracking_uri) #local sqlalchemy client
