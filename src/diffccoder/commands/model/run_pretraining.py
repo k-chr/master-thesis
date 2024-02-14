@@ -169,9 +169,9 @@ class PreTrainingCommand(Command):
             ckpt_dir: Path = exp_config.work_dir / 'artifacts'
             last_ckpt_fname = get_last_ckpt_name(ckpt_dir)
             
-            ckpt_path: Path = ckpt_dir / last_ckpt_fname if not exp_config.from_pretrained else exp_config.from_pretrained
+            ckpt_path: Path = ckpt_dir / last_ckpt_fname
             kwargs = {'ckpt_path':ckpt_path} if ckpt_path.is_file() else {}
-            if not kwargs:
+            if not exp_config.from_pretrained:
                 if not ckpt_dir.exists():
                     ckpt_dir.mkdir(exist_ok=True)
                 init_path = ckpt_dir / 'init.pt'
@@ -182,6 +182,9 @@ class PreTrainingCommand(Command):
                     while not  init_path.is_file():...
                     net_module = PretrainingModule(optim_cfg, rwkv_cfg, skip_init=True)
                     net_module.model.load_state_dict(t.load(init_path, map_location='cpu'))
+            elif not kwargs:
+                net_module = PretrainingModule(optim_cfg, rwkv_cfg, skip_init=True)
+                net_module.load_state_dict(t.load(exp_config.from_pretrained, map_location='cpu')['state_dict'])
             else:
                 net_module = PretrainingModule(optim_cfg, rwkv_cfg, skip_init=True)
 
