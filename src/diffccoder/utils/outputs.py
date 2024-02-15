@@ -95,12 +95,13 @@ class RWKVOutput(ModelOutput):
     
 @dataclass
 class DiffusionLosses(ModelOutput):
-    loss: t.Tensor = None
+    loss: t.Tensor
     mse_loss: t.Tensor = None
     t0_loss: t.Tensor = None
     tT_loss: t.Tensor = None
     decoder_nll: t.Tensor = None
     mse_pre: t.Tensor = None
+        
     
 @dataclass
 class DiffusionPrediction:

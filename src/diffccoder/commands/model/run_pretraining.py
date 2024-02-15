@@ -125,10 +125,10 @@ class PreTrainingCommand(Command):
                     dump_config(exp_config, config_dir)
                 
             mlflow = MLFlowDistinctLogger(experiment_name=exp_config.experiment_name,
-                                  run_name=exp_config.mlflow_run_name,
-                                  run_id=exp_config.mlflow_run_id,
-                                  tracking_uri=exp_config.mlflow_server,
-                                  artifact_location=exp_config.work_dir / 'artifacts')
+                                          run_name=exp_config.mlflow_run_name,
+                                          run_id=exp_config.mlflow_run_id,
+                                          tracking_uri=exp_config.mlflow_server,
+                                          artifact_location=exp_config.work_dir / 'artifacts')
             
             _logger.append(mlflow)
             
@@ -148,13 +148,12 @@ class PreTrainingCommand(Command):
             _logger.append(csv_logger)
         
         model_runner = ModelRunner(trainer_config=trainer_cfg,
-                                debug_config=debug_cfg,
-                                logger=_logger,
-                                callbacks=_callbacks,
-                                strategy=DDPStrategy(process_group_backend='gloo',
-                                                     timeout=timedelta(days=1.0),
-                                                     start_method='popen'),
-                                use_distributed_sampler = False)
+                                   debug_config=debug_cfg,
+                                   logger=_logger,
+                                   callbacks=_callbacks,
+                                   strategy=DDPStrategy(timeout=timedelta(days=1.0),
+                                                        start_method='popen'),
+                                   use_distributed_sampler = False)
         if exp_config.mlflow_enabled and rank_zero_only.rank == 0:
 
             command = f'{os.environ["REMOTE_TRACKING_URI"]} {exp_config.experiment_name} {exp_config.mlflow_run_name} -vvv'

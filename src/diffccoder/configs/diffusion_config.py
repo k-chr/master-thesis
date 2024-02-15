@@ -29,3 +29,4 @@ class DiffusionConfig(BaseConfig):
     use_ema_at_infer: bool = False
     update_ema_every: int = 200
     encoder_path: Path | None = None
+    freeze_encoder: bool = False

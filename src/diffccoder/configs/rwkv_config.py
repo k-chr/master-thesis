@@ -17,6 +17,7 @@ class RWKVConfig(BaseConfig):
     layer_norm_epsilon: float = 1e-5
     bos_token_id: int = 0
     eos_token_id: int = 0
+    pad_token_id: int | None = None
     rescale_every: int = 6
     tie_word_embeddings: bool = False
     use_cache: bool = True

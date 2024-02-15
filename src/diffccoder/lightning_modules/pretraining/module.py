@@ -43,10 +43,9 @@ class PretrainingModule(TrainingBase):
         y = y.to(t.int64)
         rwkv_out: RWKVOutput = self.model(x.int())
 
-        shift_x_hat = rwkv_out.logits[..., :-1, :].contiguous()
-        shift_y = y[..., 1:].contiguous()
+        x_hat = rwkv_out.logits.contiguous()
+        _y = y.contiguous()
         
-        loss = F.cross_entropy(shift_x_hat.view(-1, shift_x_hat.size(-1)),
-                               shift_y.view(-1))
+        loss = F.cross_entropy(x_hat.view(-1, x_hat.size(-1)), _y.view(-1))
                                
         return loss, rwkv_out, y

@@ -3,8 +3,8 @@ from torch import nn
 import torch.nn.functional as F
 
 
-def register_buffer_to_f32(module: nn.Module, name: str, buffer: t.Tensor):
-    module.register_buffer(f"_{module._get_name()}__{name}", buffer.to(t.float32))
+def register_buffer_to_type(module: nn.Module, name: str, buffer: t.Tensor, dtype: t.dtype =t.float32):
+    module.register_buffer(f"_{module._get_name()}__{name}", buffer.to(dtype))
 
 
 class PosteriorBuffers(nn.Module):
@@ -21,13 +21,13 @@ class PosteriorBuffers(nn.Module):
 
         # above: equal to 1. / (1. / (1. - alpha_cumprod_tm1) + alpha_t / beta_t)
 
-        register_buffer_to_f32(self, 'variance', posterior_variance)
+        register_buffer_to_type(self, 'variance', posterior_variance)
 
         # below: log calculation clipped because the posterior variance is 0 at the beginning of the diffusion chain
 
-        register_buffer_to_f32(self, 'log_variance_clipped', t.log(posterior_variance.clamp(min =1e-20)))
-        register_buffer_to_f32(self, 'mean_coef1', betas * t.sqrt(alphas_cumprod_prev) / (1. - alphas_cumprod))
-        register_buffer_to_f32(self, 'mean_coef2', (1. - alphas_cumprod_prev) * t.sqrt(1. - betas) / (1. - alphas_cumprod))
+        register_buffer_to_type(self, 'log_variance_clipped', t.log(posterior_variance.clamp(min =1e-20)))
+        register_buffer_to_type(self, 'mean_coef1', betas * t.sqrt(alphas_cumprod_prev) / (1. - alphas_cumprod))
+        register_buffer_to_type(self, 'mean_coef2', (1. - alphas_cumprod_prev) * t.sqrt(1. - betas) / (1. - alphas_cumprod))
         
     @property
     def variance(self) -> t.Tensor:
@@ -61,16 +61,16 @@ class AlphaBuffers(nn.Module):
         alphas_cumprod = t.cumprod(alphas, dim=0)
         alphas_cumprod_prev = F.pad(alphas_cumprod[:-1], (1, 0), value = 1.)
         
-        register_buffer_to_f32(self, 'cumprod', alphas_cumprod)
-        register_buffer_to_f32(self, 'cumprod_prev', alphas_cumprod_prev)
+        register_buffer_to_type(self, 'cumprod', alphas_cumprod)
+        register_buffer_to_type(self, 'cumprod_prev', alphas_cumprod_prev)
 
         # calculations for diffusion q(x_t | x_{t-1}) and others
 
-        register_buffer_to_f32(self, 'sqrt_cumprod', t.sqrt(alphas_cumprod))
-        register_buffer_to_f32(self, 'sqrt_one_minus_cumprod', t.sqrt(1. - alphas_cumprod))
-        register_buffer_to_f32(self, 'log_one_minus_cumprod', t.log(1. - alphas_cumprod))
-        register_buffer_to_f32(self, 'sqrt_recip_cumprod', t.sqrt(1. / alphas_cumprod))
-        register_buffer_to_f32(self, 'sqrt_recip_minus_one_cumprod', t.sqrt(1. / alphas_cumprod - 1))
+        register_buffer_to_type(self, 'sqrt_cumprod', t.sqrt(alphas_cumprod))
+        register_buffer_to_type(self, 'sqrt_one_minus_cumprod', t.sqrt(1. - alphas_cumprod))
+        register_buffer_to_type(self, 'log_one_minus_cumprod', t.log(1. - alphas_cumprod))
+        register_buffer_to_type(self, 'sqrt_recip_cumprod', t.sqrt(1. / alphas_cumprod))
+        register_buffer_to_type(self, 'sqrt_recip_minus_one_cumprod', t.sqrt(1. / alphas_cumprod - 1))
 
     @property
     def cumprod(self) -> t.Tensor:

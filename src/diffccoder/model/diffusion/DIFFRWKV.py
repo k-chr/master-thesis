@@ -7,6 +7,7 @@ from torch import nn
 from diffccoder.configs.diffusion_config import DiffusionConfig
 from diffccoder.configs.enums import DiffusionModelType
 from diffccoder.configs.rwkv_config import RWKVConfig
+from diffccoder.model.diffusion.buffers import register_buffer_to_type
 from diffccoder.model.rwkv.layers import RWKVChannelMix, RWKVTimeMix
 from diffccoder.utils.outputs import BlockState, BlockStateList
 
@@ -38,7 +39,7 @@ class SinusoidalPosEmb(nn.Module):
         self.dim = dim
         self.theta = theta
 
-    def forward(self, x: t.Tensor):
+    def forward(self, x: t.Tensor, dtype: Optional[t.dtype] = None):
         device = x.device
         half_dim = self.dim // 2
         emb = math.log(self.theta) / (half_dim - 1)
@@ -46,6 +47,8 @@ class SinusoidalPosEmb(nn.Module):
         x_new_axis = x[:,:, None] if x.dim() > 1 else x[:,None]
         emb = x_new_axis * emb[None, :]
         emb = t.cat((emb.cos(), emb.sin()), dim=-1)
+        if dtype is not None:
+            emb = emb.to(dtype)
         return emb
 
 
@@ -98,6 +101,8 @@ class DIFF_RWKVBlock(nn.Module):
         
 
 class DIFF_RWKV(nn.Module):
+    __position_ids: t.Tensor
+    
     def __init__(self, diff_config: DiffusionConfig, rwkv_config: RWKVConfig):
         super().__init__()
         
@@ -108,12 +113,6 @@ class DIFF_RWKV(nn.Module):
         self.emb_scale = math.sqrt(rwkv_config.embedding_size) if self.diff_config.scale_embedding else 1.0
         
         self.timestep_embedding = SinusoidalPosEmb(diff_config.time_channels)
-
-        if self.diff_config.objective is DiffusionModelType.START_X:
-            self.lm_transform = nn.Sequential(nn.Linear(rwkv_config.embedding_size,
-                                                        rwkv_config.embedding_size),
-                                              nn.GELU(),
-                                              nn.LayerNorm(rwkv_config.embedding_size))
         
         if not diff_config.time_att:
             # time embedding layer
@@ -126,11 +125,15 @@ class DIFF_RWKV(nn.Module):
         self.blocks = DIFF_RWKVSequential(*[DIFF_RWKVBlock(diff_config, rwkv_config, i)
                                     for i in range(rwkv_config.num_hidden_layers)])
             
+        self.ln_in = nn.LayerNorm(rwkv_config.embedding_size)
         self.ln_out = nn.LayerNorm(rwkv_config.embedding_size)
         
         self.dropout = nn.Dropout(diff_config.time_dropout)
         
-        self.emb = nn.Embedding(rwkv_config.vocab_size, rwkv_config.embedding_size)
+        register_buffer_to_type(self, 'position_ids', t.arange(diff_config.tgt_len).expand((1, -1)), dtype=t.int32)
+        self.positional_embedding = nn.Embedding(diff_config.tgt_len, rwkv_config.embedding_size)
+        
+        self.emb = nn.Embedding(rwkv_config.vocab_size, rwkv_config.embedding_size, padding_idx=rwkv_config.pad_token_id)
         self.head = nn.Linear(rwkv_config.embedding_size, rwkv_config.vocab_size, bias=False)
         
         with t.inference_mode():
@@ -142,7 +145,11 @@ class DIFF_RWKV(nn.Module):
                 nn.Tanh(),
                 nn.Linear(rwkv_config.embedding_size * 2, rwkv_config.embedding_size)
             )     
-        
+       
+    @property
+    def position_ids(self):
+        return self.__position_ids
+     
     def forward(self,
                 x_t: t.Tensor,
                 timesteps: t.Tensor,
@@ -150,7 +157,9 @@ class DIFF_RWKV(nn.Module):
                 state: Optional[BlockStateList] =None,
                 x_self_cond: Optional[t.Tensor] =None) -> tuple[t.Tensor, Optional[BlockStateList]]:
         
-        time_emb = self.timestep_embedding(timesteps)
+        time_emb = self.timestep_embedding(timesteps, x_t.dtype)
+        pos = self.position_ids[:, :x_t.shape[1]]
+        pos_emb = self.positional_embedding(pos)
         
         if self.diff_config.self_condition:
             if x_self_cond is None:
@@ -158,14 +167,14 @@ class DIFF_RWKV(nn.Module):
             x_t = t.cat((x_self_cond, x_t), dim=-1)
             x_t = self.input_up_proj(x_t)
         
-        decoder_input = x_t
+        decoder_input = x_t + pos_emb
            
         if not self.diff_config.time_att:
             time_proj = self.time_trans(time_emb)
             decoder_input = decoder_input + time_proj
             time_emb = None
         
-        hidden_states = self.dropout(decoder_input)
+        hidden_states = self.dropout(self.ln_in(decoder_input))
         
         hidden_states, new_state = self.blocks(hidden_states, encoder_state, state, time_emb=time_emb)   
             
@@ -175,6 +184,4 @@ class DIFF_RWKV(nn.Module):
         return self.emb(input_ids) * self.emb_scale
 
     def get_logits(self, hidden_repr: t.Tensor) -> t.Tensor:
-        if self.diff_config.objective is DiffusionModelType.START_X:
-            hidden_repr = self.lm_transform(hidden_repr)
         return self.head(hidden_repr)

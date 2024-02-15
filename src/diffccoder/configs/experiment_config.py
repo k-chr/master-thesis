@@ -10,6 +10,7 @@ class ExperimentConfig(BaseConfig):
     
     from_pretrained: Path | None = None
     
+    prefix_lm: bool = False
     batch_size: int = 128
     val_batch_size: int = 32
     pin_memory: bool = True
