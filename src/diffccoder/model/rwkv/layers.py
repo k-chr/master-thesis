@@ -2,7 +2,6 @@ import abc
 import math
 from typing import Optional
 
-from loguru import logger
 import torch as t
 from torch import Tensor, nn
 
@@ -93,7 +92,12 @@ class RWKVTimeMix(t.jit.ScriptModule):
         sr, k, v, shift_state = self.rkv(x, state.shift_state if state is not None else None)
         
         
-        att, wkv_state = wkv(B, T, C, self.time_decay, self.time_first, k, v, state.wkv_state if state is not None else None, self.cross_att)
+        att, wkv_state = wkv(B, T, C,
+                             self.time_decay,
+                             self.time_first,
+                             k, v,
+                             state.wkv_state if state is not None else None,
+                             self.cross_att)
         
         rwkv = sr * att
         rwkv = self.output(rwkv)

@@ -17,7 +17,7 @@ class RWKV(nn.Module):
         self.step = 0
         self.config = config
 
-        self.emb = nn.Embedding(config.vocab_size, config.embedding_size)
+        self.emb = nn.Embedding(config.vocab_size, config.embedding_size, config.pad_token_id)
 
         self.blocks = RWKVSequential(*[(RWKVFfnPreBlock if config.use_ffn_pre and not i else RWKVBlock)(config, i)
                                     for i in range(config.num_hidden_layers)])
