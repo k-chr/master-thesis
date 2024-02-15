@@ -36,7 +36,12 @@ class DiffusionTrainingModule(TrainingBase):
         rwkv_path = diff_config.encoder_path
         
         if rwkv_path is not None:
-            obj: PretrainingModule = t.load(rwkv_path)
+            obj: PretrainingModule = PretrainingModule(optimization_config,
+                                                       rwkv_config,
+                                                       skip_init=True)
+            obj.load_state_dict(t.load(rwkv_path)['state_dict'])
+            if diff_config.freeze_encoder:
+                obj.freeze()
             encoder: RWKV = obj.model.rwkv
         else:
             encoder = RWKV(rwkv_config)
@@ -53,12 +58,12 @@ class DiffusionTrainingModule(TrainingBase):
     def training_step(self, batch: t.Tensor, batch_idx: int) -> t.Tensor:
         losses, y = self._process_batch(batch)
         
-        self.log('train_loss', losses.loss.mean(-1), on_step=True, prog_bar=True)
-        self.log('train_mse', losses.mse_loss.mean(-1), on_step=True, prog_bar=True)
-        self.log('train_t0_loss', losses.t0_loss.mean(-1), on_step=True, prog_bar=True)
-        self.log('train_tT_loss', losses.tT_loss.mean(-1), on_step=True, prog_bar=True)
-        self.log('train_decoder_nll', losses.decoder_nll.mean(-1), on_step=True, prog_bar=True)
-        self.log('train_perplexity', t.exp(losses.decoder_nll.mean(-1)), on_step=True, prog_bar=True)
+        self.log('train_loss', losses.loss.mean(), on_step=True, prog_bar=True)
+        self.log('train_mse', losses.mse_loss.mean(), on_step=True, prog_bar=True)
+        self.log('train_t0_loss', losses.t0_loss.mean(), on_step=True, prog_bar=True)
+        self.log('train_tT_loss', losses.tT_loss.mean(), on_step=True, prog_bar=True)
+        self.log('train_decoder_nll', losses.decoder_nll.mean(), on_step=True, prog_bar=True)
+        self.log('train_perplexity', t.exp(losses.decoder_nll.mean()), on_step=True, prog_bar=True)
         
         return L2Wrap.apply(losses.loss.mean(-1), y.to(self.dtype))
 
@@ -79,8 +84,8 @@ class DiffusionTrainingModule(TrainingBase):
     
     def _process_batch(self, batch: t.Tensor):
         _, x, y = batch
-        y = y.to(t.int64)
-        
+        y = y.long()
+        x = x.int()
         if self.training == False and self.diff_config.use_ema_at_infer and self.__trainer().ema is not None:
             logger.info('Using EMA')
             model: GaussianDiffusion = self.__trainer().ema.ema_model
