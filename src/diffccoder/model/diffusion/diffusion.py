@@ -12,9 +12,10 @@ from diffccoder.configs.diffusion_config import DiffusionConfig
 from diffccoder.configs.enums import DiffusionModelType
 from diffccoder.model.diffusion.DIFFRWKV import DIFF_RWKV
 from diffccoder.model.diffusion.betas import get_named_beta_schedule
-from diffccoder.model.diffusion.buffers import AlphaBuffers, PosteriorBuffers, register_buffer_to_f32
+from diffccoder.model.diffusion.buffers import AlphaBuffers, PosteriorBuffers, register_buffer_to_type
 from diffccoder.model.diffusion.sampler import XYUniformSampler
 from diffccoder.model.rwkv.RWKVCM import RWKV
+from diffccoder.utils.l2wrap import L2Wrap
 from diffccoder.utils.outputs import BlockStateList, DiffusionLosses, DiffusionPrediction, RWKVOutput
 
 def identity(x: t.Tensor):
@@ -44,11 +45,11 @@ class GaussianDiffusion(nn.Module):
         self.alpha_buffers = AlphaBuffers(alphas) 
         self.posterior_buffers = PosteriorBuffers(betas, self.alpha_buffers.cumprod, self.alpha_buffers.cumprod_prev)
 
-        register_buffer_to_f32(self, 'betas', betas)
+        register_buffer_to_type(self, 'betas', betas)
 
         # derive loss weight
        
-        snr = self.alpha_buffers.cumprod / (1 - self.alpha_buffers.cumprod)
+        snr: t.Tensor = self.alpha_buffers.cumprod / (1 - self.alpha_buffers.cumprod)
 
         # https://arxiv.org/abs/2303.09556
 
@@ -64,7 +65,7 @@ class GaussianDiffusion(nn.Module):
             case _:
                 raise RuntimeError()
         
-        register_buffer_to_f32(self, 'loss_weight', loss_weight)
+        register_buffer_to_type(self, 'loss_weight', loss_weight)
 
     @property
     def betas(self) -> t.Tensor: 
@@ -78,10 +79,10 @@ class GaussianDiffusion(nn.Module):
     def device(self):
         return self.__betas.device
 
-    def predict_start_from_noise(self, x_t: t.Tensor, t: t.Tensor, noise: t.Tensor):
+    def predict_start_from_noise(self, x_t: t.Tensor, timestep: t.Tensor, noise: t.Tensor):
         return (
-            extract(self.alpha_buffers.sqrt_recip_cumprod, t, x_t.shape) * x_t -
-            extract(self.alpha_buffers.sqrt_recip_minus_one_cumprod, t, x_t.shape) * noise
+            extract(self.alpha_buffers.sqrt_recip_cumprod, timestep, x_t.shape) * x_t -
+            extract(self.alpha_buffers.sqrt_recip_minus_one_cumprod, timestep, x_t.shape) * noise
         )
 
     def predict_noise_from_start(self, x_t: t.Tensor, timestep: t.Tensor, x_start: t.Tensor):
@@ -148,8 +149,6 @@ class GaussianDiffusion(nn.Module):
 
                 if clip_x_start and rederive_pred_noise:
                     pred_noise = self.predict_noise_from_start(x, timestep, x_start)
-            case _:
-                raise RuntimeError(f'Unknown objective: {self.config.objective}')
 
         return DiffusionPrediction(pred_noise=pred_noise, pred_x_start=x_start, pred_x_prev=x_prev)
 
@@ -243,8 +242,6 @@ class GaussianDiffusion(nn.Module):
             case DiffusionModelType.PREVIOUS_X:         
                 target = self.q_posterior(x_start=x_start, x_t=x, timestep=timesteps)[0]
                 pred = preds.pred_x_prev
-            case _:
-                raise ValueError(f'unknown objective {self.config.objective}')
 
         mse_loss = F.mse_loss(pred, target, reduction = 'none')
         mse_loss = reduce(mse_loss, 'b s ... -> b s', 'mean')
@@ -253,9 +250,9 @@ class GaussianDiffusion(nn.Module):
         t0_loss = ((x_start_mean - preds.pred_x_start) ** 2)
         t0_loss = reduce(t0_loss, 'b s ... -> b s', 'mean')
         
-        mse_pre = mse_loss
+        mse_pre = reduce(mse_loss, 'b s ... -> b s', 'mean')
 
-        mse_loss = t.where(t0_mask, t0_loss, mse_loss)
+        mse_loss = reduce(t.where(t0_mask, t0_loss, mse_loss), 'b s ... -> b s', 'mean')
         
         x_output = preds.pred_x_start if self.config.objective is DiffusionModelType.START_X else x_start
         
@@ -264,15 +261,15 @@ class GaussianDiffusion(nn.Module):
         tT_loss = reduce(tT_loss, 'b s ... -> b s', 'mean')
         
         logits = self.model.get_logits(x_output)
-        shift_x_hat = logits[..., :, :].contiguous()
-        shift_y = tgt_indices[..., :].contiguous()
+        shift_x_hat = logits.contiguous()
+        shift_y = tgt_indices.contiguous()
         
         decoder_nll = F.cross_entropy(shift_x_hat.view(-1, shift_x_hat.size(-1)),
-                                      shift_y.view(-1), reduction='none').view(shift_y.shape)
+                                      shift_y.view(-1))
         
-        loss = mse_loss + decoder_nll + tT_loss
+        loss = mse_loss + L2Wrap.apply(decoder_nll, tgt_indices.to(decoder_nll.dtype)) + tT_loss
         
-        loss = loss * extract(self.loss_weight, timesteps, loss.shape)
+        loss = reduce(loss, 'b s ... -> b', 'mean')
         return DiffusionLosses(loss=loss,
                                mse_loss=mse_loss,
                                mse_pre=mse_pre,
@@ -285,9 +282,10 @@ class GaussianDiffusion(nn.Module):
     
     def forward(self, src_indices: t.Tensor, tgt_indices: t.Tensor):
         b = src_indices.shape[0]
-        timesteps, weights = self.timesteps_sampler.sample(b, src_indices.device, src_indices.shape[1])
+        timesteps, _ = self.timesteps_sampler.sample(b, src_indices.device, src_indices.shape[1])
+
         losses = self.p_losses(src_indices, tgt_indices, timesteps)
-        losses.loss.mul_(weights)
+        
         return losses
 
 def extract(x_0: t.Tensor, timesteps: t.Tensor, x_shape: tuple[int, ...] | t.Size):
