@@ -5,6 +5,7 @@
     ema_beta: 0.9999
     encoder_path: null
     end_point_scale: 2.0
+    freeze_encoder: false
     gen_timesteps: 3000
     inference_sampler: !InferenceSamplerType
         value: default
