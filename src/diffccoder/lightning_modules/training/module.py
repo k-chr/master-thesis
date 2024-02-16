@@ -9,11 +9,11 @@ import torch as t
 from diffccoder.configs.diffusion_config import DiffusionConfig
 from diffccoder.configs.optimization_config import OptimizationConfig
 from diffccoder.configs.rwkv_config import RWKVConfig
-from diffccoder.lightning_modules.model_runner import EMAModelRunner
 from diffccoder.lightning_modules.pretraining.module import PretrainingModule
 from diffccoder.lightning_modules.training_base import TrainingBase
 from diffccoder.model.diffusion.DIFFRWKV import DIFF_RWKV
 from diffccoder.model.diffusion.diffusion import GaussianDiffusion
+from diffccoder.model.diffusion.ema import EMA
 from diffccoder.model.rwkv.RWKVCM import RWKV
 from diffccoder.model.rwkv.initialization import RWKV_Init
 from diffccoder.utils.outputs import DiffusionLosses
@@ -52,58 +52,57 @@ class DiffusionTrainingModule(TrainingBase):
         
         if not skip_init:
             RWKV_Init(decoder, rwkv_config)
-        
+                   
         self.model = GaussianDiffusion(encoder=encoder, model=decoder, config=diff_config)
-       
+        
+        if rank_zero_only.rank == 0:
+            self.ema = EMA(beta=diff_config.ema_beta,
+                           update_after_step=diff_config.update_ema_every,
+                           include_online_model=False,
+                           model=self.model)
+        
     def training_step(self, batch: t.Tensor, batch_idx: int) -> t.Tensor:
         losses, y = self._process_batch(batch)
         
-        self.log('train_loss', losses.loss.mean(), on_step=True, prog_bar=True)
-        self.log('train_mse', losses.mse_loss.mean(), on_step=True, prog_bar=True)
-        self.log('train_t0_loss', losses.t0_loss.mean(), on_step=True, prog_bar=True)
-        self.log('train_tT_loss', losses.tT_loss.mean(), on_step=True, prog_bar=True)
-        self.log('train_decoder_nll', losses.decoder_nll.mean(), on_step=True, prog_bar=True)
-        self.log('train_perplexity', t.exp(losses.decoder_nll.mean()), on_step=True, prog_bar=True)
+        self.log_losses(losses, 'train')
         
         return L2Wrap.apply(losses.loss.mean(-1), y.to(self.dtype))
 
     def validation_step(self, batch: t.Tensor, batch_idx: int) -> t.Tensor:
         losses, _ = self._process_batch(batch)
         
-        self.log('validation_loss', losses.loss.mean())
-        self.log('validation_mse', losses.mse_loss.mean())
-        self.log('validation_t0_loss', losses.t0_loss.mean())
-        self.log('validation_tT_loss', losses.tT_loss.mean())
-        self.log('validation_decoder_nll', losses.decoder_nll.mean())
-        self.log('validation_perplexity', t.exp(losses.decoder_nll.mean()))
+        self.log_losses(losses, 'validation')
 
+        if rank_zero_only.rank == 0 and self.diff_config.use_ema_at_infer:
+            losses, _ = self._process_batch(batch, use_ema=True)
+            self.log_losses(losses, 'ema')
+        
         return losses.loss.mean()
 
-    def __trainer(self) -> EMAModelRunner:
-        return self.trainer
+    def log_losses(self, losses: DiffusionLosses, prefix: str):
+        kwargs = {'on_step':True, 'prog_bar':True} if prefix == 'train' else {}
+        
+        self.log(f'{prefix}_loss', losses.loss.mean(), **kwargs)
+        self.log(f'{prefix}_mse', losses.mse_loss.mean(), **kwargs)
+        self.log(f'{prefix}_t0_loss', losses.t0_loss.mean(), **kwargs)
+        self.log(f'{prefix}_tT_loss', losses.tT_loss.mean(), **kwargs)
+        self.log(f'{prefix}_decoder_nll', losses.decoder_nll.mean(), **kwargs)
+        self.log(f'{prefix}_perplexity', t.exp(losses.decoder_nll.mean()), **kwargs)
     
-    def _process_batch(self, batch: t.Tensor):
+    def _process_batch(self, batch: t.Tensor, use_ema: bool =False):
         _, x, y = batch
         y = y.long()
         x = x.int()
-        if self.training == False and self.diff_config.use_ema_at_infer and self.__trainer().ema is not None:
-            logger.info('Using EMA')
-            model: GaussianDiffusion = self.__trainer().ema.ema_model
-        else:
-            model = self.model
+        
+        model: GaussianDiffusion = self.model if not use_ema else self.ema
         
         diff_out: DiffusionLosses = model(x, y)
         
         return diff_out, y
     
-    def on_train_start(self) -> None:
-        logger.info('Initialization of EMA parameters...')
-        self.__trainer().init_ema(self, self.diff_config)
-        
-        return super().on_train_start()
-    
     def on_train_batch_end(self, outputs: STEP_OUTPUT, batch: Any, batch_idx: int) -> None:
         if rank_zero_only.rank == 0:
-            self.__trainer().ema.update()        
+            logger.debug('Updating EMA weights')
+            self.ema.update()        
 
         return super().on_train_batch_end(outputs, batch, batch_idx)

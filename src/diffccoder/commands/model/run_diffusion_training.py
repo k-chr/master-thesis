@@ -27,7 +27,7 @@ from diffccoder.lightning_modules.mlflow_distinct_logger import MLFlowDistinctLo
 from diffccoder.model.diffusion.ema import EMA
 from diffccoder.utils.mlflow_utils import log_config
 from diffccoder.utils.task_scheduler import RepeatingScheduler
-from diffccoder.lightning_modules.model_runner import EMAModelRunner
+from diffccoder.lightning_modules.model_runner import ModelRunner
 from diffccoder.lightning_modules.training.module import DiffusionTrainingModule
 
 DEFAULT_RUN_NAME = 'Diff-Training'
@@ -152,14 +152,14 @@ class DiffTrainingCommand(Command):
                                    flush_logs_every_n_steps=trainer_cfg.log_every_n_steps**2)
             _logger.append(csv_logger)
         
-        model_runner = EMAModelRunner(trainer_config=trainer_cfg,
-                                      debug_config=debug_cfg,
-                                      logger=_logger,
-                                      callbacks=_callbacks,
-                                      strategy=DDPStrategy(timeout=timedelta(days=1.0),
-                                                           start_method='popen',
-                                                           find_unused_parameters=True),
-                                      use_distributed_sampler = False)
+        model_runner = ModelRunner(trainer_config=trainer_cfg,
+                                   debug_config=debug_cfg,
+                                   logger=_logger,
+                                   callbacks=_callbacks,
+                                   strategy=DDPStrategy(timeout=timedelta(days=1.0),
+                                                        start_method='popen',
+                                                        find_unused_parameters=True),
+                                   use_distributed_sampler = False)
         if exp_config.mlflow_enabled and rank_zero_only.rank == 0:
 
             command = f'{os.environ["REMOTE_TRACKING_URI"]} {exp_config.experiment_name} {exp_config.mlflow_run_name} -vvv'
