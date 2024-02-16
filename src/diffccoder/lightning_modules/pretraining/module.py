@@ -25,18 +25,22 @@ class PretrainingModule(TrainingBase):
     def training_step(self, batch: t.Tensor, batch_idx: int) -> t.Tensor:
         loss, _, y = self._process_batch(batch)
         
-        self.log('train_loss', loss, on_step=True, prog_bar=True)
-        self.log('train_perplexity', t.exp(loss.mean()), on_step=True, prog_bar=True)
+        self.log_loss(loss, 'train')
         
         return L2Wrap.apply(loss, y.to(self.dtype))
 
     def validation_step(self, batch: t.Tensor, batch_idx: int) -> t.Tensor:
         loss, _, _ = self._process_batch(batch)
         
-        self.log('validation_loss', loss)
-        self.log('validation_perplexity', t.exp(loss.mean()))
+        self.log_loss(loss, 'validation')
 
         return loss
+    
+    def log_loss(self, loss: t.Tensor, prefix: str):
+        kwargs = dict(on_step=True, prog_bar=True) if prefix == 'train' else {}
+        
+        self.log(f'{prefix}_loss', loss, **kwargs)
+        self.log(f'{prefix}_perplexity', t.exp(loss.mean()), **kwargs)
     
     def _process_batch(self, batch: t.Tensor):
         _, x, y = batch
