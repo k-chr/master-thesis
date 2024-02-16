@@ -5,7 +5,6 @@ import torch as t
 from torch import nn
 
 from diffccoder.configs.diffusion_config import DiffusionConfig
-from diffccoder.configs.enums import DiffusionModelType
 from diffccoder.configs.rwkv_config import RWKVConfig
 from diffccoder.model.diffusion.buffers import register_buffer_to_type
 from diffccoder.model.rwkv.layers import RWKVChannelMix, RWKVTimeMix
@@ -15,6 +14,7 @@ from diffccoder.utils.outputs import BlockState, BlockStateList
 class DIFF_RWKVSequential(nn.Sequential):
     def forward(self, 
                 x: t.Tensor,
+                encoder_hidden_state: t.Tensor,
                 encoder_state: BlockStateList,
                 state: Optional[BlockStateList] =None,
                 time_emb: Optional[t.Tensor] =None) -> tuple[t.Tensor, Optional[BlockStateList]]:
@@ -23,12 +23,12 @@ class DIFF_RWKVSequential(nn.Sequential):
         if not state:
             for module in self:
                 layer_id = getattr(module,'layer_id')
-                x, _ = module(x, encoder_state[layer_id], None, time_emb)
+                x, _ = module(x, encoder_hidden_state, encoder_state[layer_id], None, time_emb)
         else:
             new_state = BlockStateList.empty_like(state)
             for module in self:
                 layer_id = getattr(module,'layer_id')
-                x, layer_state = module(x, encoder_state[layer_id], state[layer_id], time_emb)
+                x, layer_state = module(x,encoder_hidden_state, encoder_state[layer_id], state[layer_id], time_emb)
                 new_state[layer_id] = layer_state
         return x, new_state
     
@@ -76,7 +76,7 @@ class DIFF_RWKVBlock(nn.Module):
                                                       nn.SiLU(),
                                                       nn.Linear(diff_config.time_channels * 4, rwkv_config.embedding_size))
             
-    def forward(self, hidden_states: t.Tensor, encoder_state: BlockState, self_state: Optional[BlockState] =None, time_emb: Optional[t.Tensor] =None):
+    def forward(self, hidden_states: t.Tensor, encoder_hidden_state: t.Tensor, encoder_state: BlockState, self_state: Optional[BlockState] =None, time_emb: Optional[t.Tensor] =None):
         if time_emb is not None:
             time_emb = self.diff_time_projection(time_emb)
             
@@ -89,7 +89,7 @@ class DIFF_RWKVBlock(nn.Module):
         hidden_states = hidden_states + att
         
         # 'Cross'-WKV attention
-        att, _ = self.cross_att(self.ln2(hidden_states), encoder_state.time_mix_state)
+        att, _ = self.cross_att(self.ln2(encoder_hidden_state), encoder_state.time_mix_state)
         hidden_states = hidden_states + att
         
         # FFN RKV
@@ -153,6 +153,7 @@ class DIFF_RWKV(nn.Module):
     def forward(self,
                 x_t: t.Tensor,
                 timesteps: t.Tensor,
+                encoder_hidden_state: t.Tensor,
                 encoder_state: BlockStateList,
                 state: Optional[BlockStateList] =None,
                 x_self_cond: Optional[t.Tensor] =None) -> tuple[t.Tensor, Optional[BlockStateList]]:
@@ -176,7 +177,7 @@ class DIFF_RWKV(nn.Module):
         
         hidden_states = self.dropout(self.ln_in(decoder_input))
         
-        hidden_states, new_state = self.blocks(hidden_states, encoder_state, state, time_emb=time_emb)   
+        hidden_states, new_state = self.blocks(hidden_states, encoder_hidden_state, encoder_state, state, time_emb=time_emb)   
             
         return self.ln_out(hidden_states), new_state
     

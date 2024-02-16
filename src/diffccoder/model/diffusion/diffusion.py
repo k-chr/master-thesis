@@ -117,7 +117,8 @@ class GaussianDiffusion(nn.Module):
     def model_predictions(self,
                           x: t.Tensor,
                           timestep: t.Tensor,
-                          encoder_hidden_states: Optional[BlockStateList] =None,
+                          encoder_hidden_states: t.Tensor,
+                          encoder_wkv_states: Optional[BlockStateList] =None,
                           x_self_cond: Optional[t.Tensor] =None,
                           diff_state: Optional[BlockStateList] = None,
                           clip_x_start: bool =False,
@@ -125,7 +126,7 @@ class GaussianDiffusion(nn.Module):
                           model_output: Optional[t.Tensor] = None):
         
         if model_output is None:
-            model_output, _ = self.model(x, self._scale_timesteps(timestep), encoder_hidden_states, diff_state, x_self_cond)
+            model_output, _ = self.model(x, self._scale_timesteps(timestep), encoder_hidden_states, encoder_wkv_states, diff_state, x_self_cond)
             
         maybe_clip = partial(t.clamp, min = -1., max = 1.) if clip_x_start else identity
         x_prev = None
@@ -155,6 +156,7 @@ class GaussianDiffusion(nn.Module):
     def p_mean_variance(self,
                         x: t.Tensor,
                         timestep: t.Tensor,
+                        encoder_hidden_states: t.Tensor,
                         encoder_state: BlockStateList,
                         x_self_cond: Optional[t.Tensor] = None,
                         clip_denoised: bool = True,
@@ -162,7 +164,8 @@ class GaussianDiffusion(nn.Module):
         
         preds = self.model_predictions(x, 
                                        timestep,
-                                       encoder_hidden_states=encoder_state,
+                                       encoder_hidden_states,
+                                       encoder_wkv_states=encoder_state,
                                        x_self_cond=x_self_cond,
                                        diff_state=diff_state)
         x_start = preds.pred_x_start
@@ -219,18 +222,19 @@ class GaussianDiffusion(nn.Module):
                                                                         e_cfg.embedding_size,
                                                                         src_indices.device,
                                                                         t.float32))
-        encoder_hidden_state = encoder_output.state
+        encoder_wkv_state = encoder_output.state
+        encoder_hidden_states = encoder_output.last_hidden_state
         
         x_self_cond = None
         if self.config.self_condition and random() < 0.5:
             with t.inference_mode():
-                preds: DiffusionPrediction =self.model_predictions(x, timesteps, encoder_hidden_state)
+                preds: DiffusionPrediction =self.model_predictions(x, timesteps, encoder_hidden_states, encoder_wkv_state)
                 x_self_cond = preds.pred_x_start
                 x_self_cond.detach_()
 
         # predict
 
-        preds: DiffusionPrediction =self.model_predictions(x, timesteps, encoder_hidden_state, x_self_cond)
+        preds: DiffusionPrediction =self.model_predictions(x, timesteps, encoder_hidden_states, encoder_wkv_state, x_self_cond)
         
         match self.config.objective:
             case DiffusionModelType.NOISE:            
