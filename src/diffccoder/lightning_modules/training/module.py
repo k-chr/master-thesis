@@ -57,7 +57,7 @@ class DiffusionTrainingModule(TrainingBase):
         
         decoder = DIFF_RWKV(diff_config=self.diff_config, rwkv_config=self.rwkv_config)
         
-        if not self.save_before_training:
+        if self.save_before_training:
             RWKV_Init(decoder, self.rwkv_config)
                    
         self.model = GaussianDiffusion(encoder=encoder, model=decoder, config=self.diff_config)
