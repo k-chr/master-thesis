@@ -156,9 +156,11 @@ class DiffTrainingCommand(Command):
                                    debug_config=debug_cfg,
                                    logger=_logger,
                                    callbacks=_callbacks,
-                                   strategy=DDPStrategy(timeout=timedelta(days=1.0),
+                                   strategy=DDPStrategy(process_group_backend='gloo',
+                                                        timeout=timedelta(days=1.0),
                                                         start_method='popen',
-                                                        find_unused_parameters=True),
+                                                        find_unused_parameters=True,
+                                                        gradient_as_bucket_view=True),
                                    use_distributed_sampler = False)
         if exp_config.mlflow_enabled and rank_zero_only.rank == 0:
 
@@ -181,19 +183,15 @@ class DiffTrainingCommand(Command):
                 
                 init_path = ckpt_dir / 'init.pt'
                 if model_runner.global_rank == 0:
-                    net_module = DiffusionTrainingModule(optim_cfg, rwkv_cfg, diff_cfg, skip_init=False)
-                    t.save(net_module.model.state_dict(), init_path)
+                    net_module = DiffusionTrainingModule(optim_cfg, rwkv_cfg, diff_cfg, skip_init=False, init_path=init_path)
                 else:
-                    while not  init_path.is_file():...
-                    net_module = DiffusionTrainingModule(optim_cfg, rwkv_cfg, diff_cfg, skip_init=True)
-                    net_module.model.load_state_dict(t.load(init_path, map_location='cpu'))
+                    net_module = DiffusionTrainingModule(optim_cfg, rwkv_cfg, diff_cfg, skip_init=True, init_path=init_path)
             elif not kwargs:
-                net_module = DiffusionTrainingModule(optim_cfg, rwkv_cfg, diff_cfg, skip_init=True)
-                net_module.load_state_dict(t.load(exp_config.from_pretrained, map_location='cpu')['state_dict'])
+                net_module = DiffusionTrainingModule(optim_cfg, rwkv_cfg, diff_cfg, skip_init=True, from_pretrained=exp_config.from_pretrained)
             else:
                 net_module = DiffusionTrainingModule(optim_cfg, rwkv_cfg, diff_cfg, skip_init=True)              
 
-            logger.info(f"Summary:\n{summary(net_module.model, [(exp_config.batch_size, rwkv_cfg.context_length), (exp_config.batch_size, rwkv_cfg.context_length)], dtypes=[t.int64, t.int64])}")
+#            logger.info(f"Summary:\n{summary(net_module.model, [(exp_config.batch_size, rwkv_cfg.context_length), (exp_config.batch_size, rwkv_cfg.context_length)], dtypes=[t.int64, t.int64])}")
             logger.info(f'Running on: {model_runner.accelerator}; Skipping initialization?: {bool(kwargs)}')
             
             if rank_zero_only.rank == 0 and exp_config.mlflow_enabled:
