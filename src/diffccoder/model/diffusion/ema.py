@@ -1,5 +1,6 @@
 from copy import deepcopy
 from functools import partial
+from pathlib import Path
 from typing import Iterator, Set, Optional
 
 import torch
@@ -47,6 +48,7 @@ class EMA(Module):
     """
     initted: Tensor
     step: Tensor
+    ema_path: Tensor
     
     def __init__(self,
                  model: Module,
@@ -61,7 +63,8 @@ class EMA(Module):
                  ignore_names: Set[str] = set(),
                  ignore_startswith_names: Set[str] = set(),
                  include_online_model = True,                  # set this to False if you do not wish for the online model to be saved along with the ema model (managed externally)
-                 allow_different_devices = False):              # if the EMA model is on a different device (say CPU), automatically move the tensor
+                 allow_different_devices = False,
+                 ema_path: Path= None):              # if the EMA model is on a different device (say CPU), automatically move the tensor
         
         super().__init__()
         self.beta = beta
@@ -80,6 +83,7 @@ class EMA(Module):
         # ema model
 
         self.ema_model = ema_model
+
 
         if not exists(self.ema_model):
             try:
@@ -126,7 +130,29 @@ class EMA(Module):
         # init and step states
 
         self.register_buffer('initted', torch.tensor(False))
+        self.register_buffer('ema_path', torch.tensor([0], dtype=torch.int16))
         self.register_buffer('step', torch.tensor(0))
+        self.set_path(ema_path)
+
+    def load(self):
+        if (p := self.get_path()) is not None and p.exists():
+            self.load_state_dict(torch.load(p, map_location='cpu'))
+
+    def save(self):
+        if (p := self.get_path()) is not None:
+            state_dict = self.state_dict()
+            torch.save(state_dict, p)
+
+    def set_path(self, path: Path | None = None):
+        if path is not None:
+            ords = list(map(ord, path.__str__()))
+            self.ema_path = torch.tensor(ords, dtype=torch.int16)
+
+    def get_path(self) -> Path | None:
+        ords = self.ema_path.tolist()
+        if len(ords) > 1:
+            return Path(''.join(map(chr, ords)))
+        return None
 
     @property
     def model(self):
