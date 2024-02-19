@@ -146,7 +146,6 @@ class DiffusionTrainingModule(TrainingBase):
     
     def on_train_batch_end(self, outputs: STEP_OUTPUT, batch: Any, batch_idx: int) -> None:
         if rank_zero_only.rank == 0:
-            logger.debug('Updating EMA weights')
             self.ema.update()        
 
         return super().on_train_batch_end(outputs, batch, batch_idx)
@@ -154,7 +153,9 @@ class DiffusionTrainingModule(TrainingBase):
     def on_save_checkpoint(self, checkpoint: dict[str, Any]) -> None:
         if rank_zero_only.rank == 0:
             state_dict: dict[str, t.Tensor| t.nn.Parameter] = checkpoint['state_dict']
-            ema_keys = [key for key in state_dict.keys() if '.ema.' in key]
+            ema_keys = [key for key in state_dict.keys() if 'ema.' in key]
             if ema_keys:
-                [checkpoint['state_dict'].__getattr__('pop')(key) for key in ema_keys]
-            self.ema.save()
+                [state_dict.pop(key) for key in ema_keys]
+                checkpoint['state_dict'] = state_dict
+            if self.trainer.state.stage is not None and self.trainer.state.stage.evaluating:
+                self.ema.save()

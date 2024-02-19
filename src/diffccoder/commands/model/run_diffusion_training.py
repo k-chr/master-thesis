@@ -159,7 +159,6 @@ class DiffTrainingCommand(Command):
                                    strategy=DDPStrategy(process_group_backend='gloo',
                                                         timeout=timedelta(days=1.0),
                                                         start_method='popen',
-                                                        find_unused_parameters=True,
                                                         gradient_as_bucket_view=True),
                                    use_distributed_sampler = False)
         if exp_config.mlflow_enabled and rank_zero_only.rank == 0:
