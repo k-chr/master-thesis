@@ -200,10 +200,10 @@ class GaussianDiffusion(nn.Module):
                  noise: Optional[t.Tensor] =None, 
                  offset_noise_strength: float =None):
         
-        if noise is None:
-            noise = t.randn_like(x_start)
-        
         x_start_mean = self.model.get_embeds(tgt_indices)
+        
+        if noise is None:
+            noise = t.randn_like(x_start_mean)
             
         x_start = self.x_start(tgt_indices.shape[0], x_start_mean.shape[1], noise, x_start_mean)
         
