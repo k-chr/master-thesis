@@ -187,6 +187,13 @@ class GaussianDiffusion(nn.Module):
             extract(self.alpha_buffers.sqrt_one_minus_cumprod, timestep, x_start.shape) * noise
         )
 
+    def x_start(self, B: int, C: int, noise: t.Tensor, x_start_mean: t.Tensor):
+        t_0 = t.zeros(B, C, device=x_start_mean.device, dtype=t.int64)
+        std = extract(self.alpha_buffers.sqrt_one_minus_cumprod, t_0, x_start_mean.shape)
+        print(std.shape, x_start_mean.shape, noise.shape)
+        x_start = x_start_mean + std * noise
+        return x_start   
+
     def p_losses(self, 
                  src_indices: t.Tensor, 
                  tgt_indices: t.Tensor, 
@@ -194,14 +201,13 @@ class GaussianDiffusion(nn.Module):
                  noise: Optional[t.Tensor] =None, 
                  offset_noise_strength: float =None):
         
-        x_start_mean = self.model.get_embeds(tgt_indices)
-        std = extract(self.alpha_buffers.sqrt_one_minus_cumprod, t.zeros(tgt_indices.shape[0], x_start_mean.shape[1], device=x_start_mean.device, dtype=t.int64), x_start_mean.shape)
-        
-        x_start = x_start_mean + std * t.rand_like(x_start_mean, device=x_start_mean.device)
-        
         if noise is None:
             noise = t.randn_like(x_start)
-
+        
+        x_start_mean = self.model.get_embeds(tgt_indices)
+            
+        x_start = self.x_start(tgt_indices.shape[0], x_start_mean.shape[1], noise, x_start_mean)
+        
         # offset noise - https://www.crosslabs.org/ blog/diffusion-with-offset-noise
         
         if offset_noise_strength is None:
