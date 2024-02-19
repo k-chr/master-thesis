@@ -190,7 +190,6 @@ class GaussianDiffusion(nn.Module):
     def x_start(self, B: int, C: int, noise: t.Tensor, x_start_mean: t.Tensor):
         t_0 = t.zeros(B, C, device=x_start_mean.device, dtype=t.int64)
         std = extract(self.alpha_buffers.sqrt_one_minus_cumprod, t_0, x_start_mean.shape)
-        print(std.shape, x_start_mean.shape, noise.shape)
         x_start = x_start_mean + std * noise
         return x_start   
 
