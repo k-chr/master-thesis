@@ -20,7 +20,7 @@ from diffccoder.configs.experiment_config import EXCL_KEYS as EXP_EXCL_KEYS, Exp
 from diffccoder.configs.optimization_config import OptimizationConfig
 from diffccoder.configs.rwkv_config import RWKVConfig
 from diffccoder.configs.trainer_config import DebugTrainerConfig, TrainerConfig, get_auto_devices
-from diffccoder.data.npy_data_loader import NPYDataModule
+from diffccoder.data.npy_data_loader import NPYZDataModule
 from diffccoder.data.utils import get_last_ckpt_name
 from diffccoder.lightning_modules.mlflow_distinct_logger import MLFlowDistinctLogger
 from diffccoder.utils.mlflow_utils import log_config
@@ -70,7 +70,7 @@ class PreTrainingCommand(Command):
             os.environ['DTYPE'] = str(trainer_cfg.precision)
         
         dirlist_txt = Path(self.argument('pre-train-dirlist.txt'))
-        data_module = NPYDataModule(in_dir=exp_config.data_dir,
+        data_module = NPYZDataModule(in_dir=exp_config.data_dir,
                                     dir_list_txt=dirlist_txt,
                                     split_val_ratio=exp_config.split_val_ratio,
                                     use_pinned_memory=exp_config.pin_memory,
