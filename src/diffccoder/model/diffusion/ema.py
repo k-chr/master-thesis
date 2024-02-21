@@ -136,7 +136,9 @@ class EMA(Module):
 
     def load(self):
         if (p := self.get_path()) is not None and p.exists():
-            self.load_state_dict(torch.load(p, map_location='cpu'))
+            state_dict: dict[str, torch.Tensor] = torch.load(p, map_location='cpu')
+            _ = state_dict.pop('ema_path')
+            self.load_state_dict(state_dict, strict=False)
 
     def save(self):
         if (p := self.get_path()) is not None:

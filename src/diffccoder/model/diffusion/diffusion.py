@@ -122,11 +122,14 @@ class GaussianDiffusion(nn.Module):
                           x_self_cond: Optional[t.Tensor] =None,
                           diff_state: Optional[BlockStateList] = None,
                           clip_x_start: bool =False,
-                          rederive_pred_noise: bool =False,
-                          model_output: Optional[t.Tensor] = None):
+                          rederive_pred_noise: bool =False) -> tuple[DiffusionPrediction, Optional[BlockStateList]]:
         
-        if model_output is None:
-            model_output, _ = self.model(x, self._scale_timesteps(timestep), encoder_hidden_states, encoder_wkv_states, diff_state, x_self_cond)
+        model_output, new_diff_state = self.model(x,
+                                                  self._scale_timesteps(timestep),
+                                                  encoder_hidden_states,
+                                                  encoder_wkv_states,
+                                                  diff_state,
+                                                  x_self_cond)
             
         maybe_clip = partial(t.clamp, min = -1., max = 1.) if clip_x_start else identity
         x_prev = None
@@ -151,7 +154,7 @@ class GaussianDiffusion(nn.Module):
                 if clip_x_start and rederive_pred_noise:
                     pred_noise = self.predict_noise_from_start(x, timestep, x_start)
 
-        return DiffusionPrediction(pred_noise=pred_noise, pred_x_start=x_start, pred_x_prev=x_prev)
+        return DiffusionPrediction(pred_noise=pred_noise, pred_x_start=x_start, pred_x_prev=x_prev), new_diff_state
 
     def p_mean_variance(self,
                         x: t.Tensor,
@@ -162,12 +165,12 @@ class GaussianDiffusion(nn.Module):
                         clip_denoised: bool = True,
                         diff_state: Optional[BlockStateList] =None):
         
-        preds = self.model_predictions(x, 
-                                       timestep,
-                                       encoder_hidden_states,
-                                       encoder_wkv_states=encoder_state,
-                                       x_self_cond=x_self_cond,
-                                       diff_state=diff_state)
+        preds, new_state = self.model_predictions(x, 
+                                                  timestep,
+                                                  encoder_hidden_states,
+                                                  encoder_wkv_states=encoder_state,
+                                                  x_self_cond=x_self_cond,
+                                                  diff_state=diff_state)
         x_start = preds.pred_x_start
 
         if clip_denoised:
@@ -175,7 +178,7 @@ class GaussianDiffusion(nn.Module):
 
         model_mean, posterior_variance, posterior_log_variance = self.q_posterior(x_start = x_start, x_t = x, timestep = timestep)
         model_mean = model_mean if self.config.objective is not DiffusionModelType.PREVIOUS_X else preds.pred_x_prev
-        return model_mean, posterior_variance, posterior_log_variance, x_start
+        return model_mean, posterior_variance, posterior_log_variance, x_start, new_state
 
     @autocast(enabled = False)
     def q_sample(self, x_start: t.Tensor, timestep: t.Tensor, noise: t.Tensor | None = None):
@@ -198,23 +201,23 @@ class GaussianDiffusion(nn.Module):
                  tgt_indices: t.Tensor, 
                  timesteps: t.Tensor, 
                  noise: Optional[t.Tensor] =None, 
-                 offset_noise_strength: float =None):
-        
+                 offset_noise_strength: float =None,
+                 diff_state: Optional[BlockStateList] = None):
+                
         x_start_mean = self.model.get_embeds(tgt_indices)
         
         if noise is None:
             noise = t.randn_like(x_start_mean)
-            
-        x_start = self.x_start(tgt_indices.shape[0], x_start_mean.shape[1], noise, x_start_mean)
-        
-        # offset noise - https://www.crosslabs.org/ blog/diffusion-with-offset-noise
+        # offset noise - https://www.crosslabs.org/blog/diffusion-with-offset-noise
         
         if offset_noise_strength is None:
             offset_noise_strength = self.config.offset_noise_strength
 
         if offset_noise_strength > 0.:
-            offset_noise = t.randn(x_start.shape[:2], device = self.device)
+            offset_noise = t.randn(x_start_mean.shape[:2], device = self.device)
             noise += offset_noise_strength * rearrange(offset_noise, 'b c -> b c 1 ')
+        
+        x_start = self.x_start(tgt_indices.shape[0], x_start_mean.shape[1], noise, x_start_mean)
 
         # noise sample
 
@@ -233,13 +236,13 @@ class GaussianDiffusion(nn.Module):
         x_self_cond = None
         if self.config.self_condition and random() < 0.5:
             with t.inference_mode():
-                preds: DiffusionPrediction =self.model_predictions(x, timesteps, encoder_hidden_states, encoder_wkv_state)
+                preds, _ = self.model_predictions(x, timesteps, encoder_hidden_states, encoder_wkv_state, diff_state=diff_state)
                 x_self_cond = preds.pred_x_start
                 x_self_cond.detach_()
 
         # predict
 
-        preds: DiffusionPrediction =self.model_predictions(x, timesteps, encoder_hidden_states, encoder_wkv_state, x_self_cond)
+        preds, new_state = self.model_predictions(x, timesteps, encoder_hidden_states, encoder_wkv_state, x_self_cond, diff_state)
         
         match self.config.objective:
             case DiffusionModelType.NOISE:            
@@ -284,18 +287,31 @@ class GaussianDiffusion(nn.Module):
                                mse_pre=mse_pre,
                                t0_loss=t0_loss,
                                tT_loss=tT_loss,
-                               decoder_nll=decoder_nll)
+                               decoder_nll=decoder_nll), new_state, noise
 
     def _scale_timesteps(self, timesteps: t.Tensor):
         return timesteps if not self.config.rescale_timesteps else timesteps.float() * (1e3 / self.config.timesteps)
     
-    def forward(self, src_indices: t.Tensor, tgt_indices: t.Tensor):
+    def forward(self, 
+                src_indices: t.Tensor,
+                tgt_indices: t.Tensor,
+                noise: Optional[t.Tensor] =None,
+                timesteps: Optional[t.Tensor] =None,
+                state: Optional[BlockStateList] =None,
+                offset_noise_strength: Optional[float] = None):
         b = src_indices.shape[0]
-        timesteps, _ = self.timesteps_sampler.sample(b, src_indices.device, src_indices.shape[1])
-
-        losses = self.p_losses(src_indices, tgt_indices, timesteps)
         
-        return losses
+        if timesteps is None:
+            timesteps, _ = self.timesteps_sampler.sample(b, src_indices.device, src_indices.shape[1])
+
+        losses, new_state, noise = self.p_losses(src_indices=src_indices,
+                                                 tgt_indices=tgt_indices,
+                                                 timesteps=timesteps,
+                                                 noise=noise,
+                                                 offset_noise_strength=offset_noise_strength,
+                                                 diff_state=state)
+        
+        return losses, new_state, timesteps, noise
 
 def extract(x_0: t.Tensor, timesteps: t.Tensor, x_shape: tuple[int, ...] | t.Size):
     b, *_ = timesteps.shape

@@ -6,6 +6,7 @@ class LRSchedulerType(Enum):
     COSINE = auto()
     STEP = auto()
     WARMUP = auto()
+    NONE = auto()
 
 class WarmUpRoutine(Enum):
     LINEAR = auto()

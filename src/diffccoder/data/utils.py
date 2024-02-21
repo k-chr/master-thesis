@@ -1,13 +1,21 @@
+from dataclasses import dataclass
 import math
 from pathlib import Path
 
 from loguru import logger
 import numpy as np
 
+
+@dataclass
+class MMapLimit:
+    lower: int
+    upper: int
+    index: int
+
 def save_chunk(stem: str,
                out_dir: Path,
                out_fn: str,
-               lines_read: int,
+               lines_read: list[str],
                chunk_counter: int):
     new_dir = out_dir / (stem + f'_part_{chunk_counter}')
  
@@ -47,6 +55,22 @@ def lazy_load(paths: list[Path], read_whole_file: bool = False):
             else:
                 while line := f.readline():
                     yield line.rstrip()
+
+def try_read(path: Path) -> str | None:
+    text = None
+    for enc in ['utf-8', 'windows-1250', 'windows-1252']:
+            try:
+                text = read_with_encoding(path, enc)
+                break
+            except:
+                pass
+    else:
+        logger.info(f'No more encodings; Current file: {path};')
+    return text
+
+def read_with_encoding(path: Path, enc: str ='utf-8'):
+    with path.open('r', encoding=enc) as f:
+        return f.read()
                     
 def partition_dataset(data_len: int,
                       num_partitions: int | None = None,

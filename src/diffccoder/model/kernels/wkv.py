@@ -257,11 +257,11 @@ def wkv_cuda(B: int,
              k: t.Tensor,
              v: t.Tensor,
              s: t.Tensor = None, 
-             cross_att = False):
+             state_backprop = False):
     if t.cuda.is_available() and not WKVKernel.state():
        WKVKernel.load() 
     if not t.cuda.is_available() or any([tensor.device.type == 'cpu' for tensor in (w, u, k, v)]):
-        return rwkv_linear_attention_cpu(w, u, k, v, s, cross_att)
+        return rwkv_linear_attention_cpu(w, u, k, v, s, state_backprop)
 
-    func_cls: Function = StateWKV if cross_att else WKV
+    func_cls: Function = StateWKV if state_backprop else WKV
     return func_cls.apply(B, T, C, w.cuda(), u.cuda(), k.cuda(), v.cuda(), s.cuda() if s is not None else s)

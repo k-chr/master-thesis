@@ -69,7 +69,7 @@ class TrainingBase(LightningModule):
                 
                 scheduler_aux_config = {'monitor': self.config.warmup_metric.name.lower(),
                                         'name': f'warmup_{self.config.warmup_scheduler.name.lower()}'}
-            case _:
+            case LRSchedulerType.NONE:
                 scheduler = None
         return scheduler_aux_config,scheduler
 
@@ -134,8 +134,6 @@ class TrainingBase(LightningModule):
                 optimizer = Adagrad8bit(params=optim_groups,
                                         lr=self.config.lr_base,
                                         eps=self.config.adam_eps)
-            case _:
-                raise RuntimeError(f'Not implemented optimizer: {self.config.optimizer}')
         return optimizer
 
     def _compute_optim_groups(self):

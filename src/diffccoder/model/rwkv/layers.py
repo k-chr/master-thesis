@@ -11,9 +11,9 @@ from diffccoder.utils.outputs import BlockState, BlockStateList, ChannelMixState
 
 
 class RWKVTimeMix(t.jit.ScriptModule):
-    def __init__(self, config: RWKVConfig, layer_id: int, cross_att: bool = False):
+    def __init__(self, config: RWKVConfig, layer_id: int, state_grad: bool = False):
         super().__init__()
-        self.cross_att = cross_att
+        self.state_grad = state_grad
         self.layer_id = layer_id
         self.context_length = config.context_length
         self.embedding_size = config.embedding_size
@@ -97,7 +97,7 @@ class RWKVTimeMix(t.jit.ScriptModule):
                              self.time_first,
                              k, v,
                              state.wkv_state if state is not None else None,
-                             self.cross_att)
+                             self.state_grad)
         
         rwkv = sr * att
         rwkv = self.output(rwkv)

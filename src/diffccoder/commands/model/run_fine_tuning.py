@@ -5,17 +5,16 @@ from pathlib import Path
 
 from cleo.commands.command import Command
 from cleo.helpers import argument
-from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor, ModelSummary
 from lightning.pytorch.loggers import TensorBoardLogger, CSVLogger
+from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor, ModelSummary
 from lightning.pytorch.strategies import DDPStrategy
 from lightning.pytorch.utilities.rank_zero import rank_zero_only
 from loguru import logger
 import mlflow as mlflow_client
 import numpy.random as np_rand
-import torch as t
-from torchinfo import summary
 
-from diffccoder.configs.base import dump_config, load_config 
+from diffccoder.configs.base import dump_config, load_config
+from diffccoder.configs.diffusion_config import DiffusionConfig 
 from diffccoder.configs.experiment_config import EXCL_KEYS as EXP_EXCL_KEYS, ExperimentConfig
 from diffccoder.configs.optimization_config import OptimizationConfig
 from diffccoder.configs.rwkv_config import RWKVConfig
@@ -26,25 +25,25 @@ from diffccoder.lightning_modules.mlflow_distinct_logger import MLFlowDistinctLo
 from diffccoder.utils.mlflow_utils import log_config
 from diffccoder.utils.task_scheduler import RepeatingScheduler
 from diffccoder.lightning_modules.model_runner import ModelRunner
-from diffccoder.lightning_modules.pretraining.module import PretrainingModule
+from diffccoder.lightning_modules.finetuning.module import DiffusionFineTuningModule
 
-DEFAULT_RUN_NAME = 'Pre-Training'
+DEFAULT_RUN_NAME = 'Diff-Fine-Tuning'
 
 def update_mlflow(command: str, name='mlflow-updater'):
     return os.system(f'poetry run app {name} {command}')
 
 
-class PreTrainingCommand(Command):
+class DiffFineTuningCommand(Command):
     
-    name = 'run-pretraining'
-    description = 'run_pretraining.py - Runs RWKV model on pre-training scenario.'
-    arguments = [argument('pretraining-yaml',
-                          description='Path to pretraining configuration.'),
-                 argument('pre-train-dirlist.txt',
+    name = 'run-diff-finetuning'
+    description = 'run_finetuning.py - Runs DIFFRWKV model on fine-tuning scenario.'
+    arguments = [argument('finetuning-yaml',
+                          description='Path to training configuration.'),
+                 argument('fine-tune-dirlist.txt',
                           description='Path to file with directory list to include during training')]
     
     def handle(self) -> int:
-        exp_config_path = Path(self.argument('pretraining-yaml'))
+        exp_config_path = Path(self.argument('finetuning-yaml'))
         exp_config: ExperimentConfig = load_config(exp_config_path)
         config_dir = exp_config.work_dir / 'configs'
         
@@ -52,6 +51,7 @@ class PreTrainingCommand(Command):
         debug_cfg: DebugTrainerConfig = load_config(p) if (p := Path(config_dir / 'debugtrainerconfig.yaml')).is_file() else None
         optim_cfg: OptimizationConfig = load_config(config_dir / 'optimizationconfig.yaml')
         rwkv_cfg: RWKVConfig = load_config(config_dir / 'rwkvconfig.yaml')
+        diff_cfg: DiffusionConfig = load_config(config_dir / 'diffusionconfig.yaml')
         
         if exp_config.seed is None:
             seed = np_rand.randint(int(2**31))
@@ -68,16 +68,19 @@ class PreTrainingCommand(Command):
             
         if os.environ.get('DTYPE', None) is None:
             os.environ['DTYPE'] = str(trainer_cfg.precision)
-        
-        dirlist_txt = Path(self.argument('pre-train-dirlist.txt'))
+            
+        dirlist_txt = Path(self.argument('fine-tune-dirlist.txt'))
         data_module = NPYZDataModule(in_dir=exp_config.data_dir,
                                     dir_list_txt=dirlist_txt,
                                     split_val_ratio=exp_config.split_val_ratio,
                                     use_pinned_memory=exp_config.pin_memory,
                                     num_workers=exp_config.number_of_workers,
                                     batch_size=exp_config.batch_size,
-                                    val_batch_size=exp_config.val_batch_size)
-                
+                                    val_batch_size=exp_config.val_batch_size,
+                                    prefix_lm=exp_config.prefix_lm,
+                                    pad_id=rwkv_cfg.pad_token_id,
+                                    mode='npz')
+        
         _logger = []
         _callbacks = []
         
@@ -122,7 +125,7 @@ class PreTrainingCommand(Command):
                 with mlflow_client.start_run(run_name=exp_config.mlflow_run_name or DEFAULT_RUN_NAME) as run:
                     exp_config.mlflow_run_name = run.info.run_name
                     exp_config.mlflow_run_id = run.info.run_id
-                    dump_config(exp_config, config_dir)
+                    dump_config(exp_config, exp_config_path)
                 
             mlflow = MLFlowDistinctLogger(experiment_name=exp_config.experiment_name,
                                           run_name=exp_config.mlflow_run_name,
@@ -133,7 +136,7 @@ class PreTrainingCommand(Command):
             _logger.append(mlflow)
             
         elif exp_config.mlflow_enabled:
-            logger.error(f'MLFlow is set to be enabled in experiment, but experiment is not set-up. Closing...')
+            logger.error(f'MlFlow is set to be enabled in experiment, but experiment is not set-up. Closing...')
             return -1
         
         if exp_config.use_tensorboard:
@@ -151,8 +154,10 @@ class PreTrainingCommand(Command):
                                    debug_config=debug_cfg,
                                    logger=_logger,
                                    callbacks=_callbacks,
-                                   strategy=DDPStrategy(timeout=timedelta(days=1.0),
-                                                        start_method='popen'),
+                                   strategy=DDPStrategy(process_group_backend='gloo',
+                                                        timeout=timedelta(days=1.0),
+                                                        start_method='popen',
+                                                        gradient_as_bucket_view=True),
                                    use_distributed_sampler = False)
         if exp_config.mlflow_enabled and rank_zero_only.rank == 0:
 
@@ -162,32 +167,21 @@ class PreTrainingCommand(Command):
                                    interval=exp_config.mlflow_log_to_remote_freq)
             r.daemon = True
             r.start()
-            
+        
         try:
-            
             ckpt_dir: Path = exp_config.work_dir / 'artifacts'
-            last_ckpt_fname = get_last_ckpt_name(ckpt_dir)
+            last_ckpt_fname = get_last_ckpt_name(ckpt_dir)    
             
             ckpt_path: Path = ckpt_dir / last_ckpt_fname
             kwargs = {'ckpt_path':ckpt_path} if ckpt_path.is_file() else {}
             if not exp_config.from_pretrained:
-                if not ckpt_dir.exists():
-                    ckpt_dir.mkdir(exist_ok=True)
-                init_path = ckpt_dir / 'init.pt'
-                if model_runner.global_rank == 0:
-                    net_module = PretrainingModule(optim_cfg, rwkv_cfg, skip_init=False)
-                    t.save(net_module.model.state_dict(), init_path)
-                else:
-                    while not  init_path.is_file():...
-                    net_module = PretrainingModule(optim_cfg, rwkv_cfg, skip_init=True)
-                    net_module.model.load_state_dict(t.load(init_path, map_location='cpu'))
-            elif not kwargs:
-                net_module = PretrainingModule(optim_cfg, rwkv_cfg, skip_init=True)
-                net_module.load_state_dict(t.load(exp_config.from_pretrained, map_location='cpu')['state_dict'])
+                net_module = DiffusionFineTuningModule(optim_cfg, rwkv_cfg, diff_cfg)
             else:
-                net_module = PretrainingModule(optim_cfg, rwkv_cfg, skip_init=True)
+                net_module = DiffusionFineTuningModule(optim_cfg, rwkv_cfg, diff_cfg, from_pretrained=exp_config.from_pretrained)           
 
-
+#            logger.info(f"Summary:\n{summary(net_module.model, [(exp_config.batch_size, rwkv_cfg.context_length), (exp_config.batch_size, rwkv_cfg.context_length)], dtypes=[t.int64, t.int64])}")
+            logger.info(f'Running on: {model_runner.accelerator}; Skipping initialization?: {bool(kwargs)}')
+            
             if rank_zero_only.rank == 0 and exp_config.mlflow_enabled:
                 log_config(mlflow.experiment,
                            exp_config.mlflow_run_id,
@@ -199,10 +193,10 @@ class PreTrainingCommand(Command):
                 log_config(mlflow.experiment,
                            exp_config.mlflow_run_id,
                            optim_cfg)
-            
-            logger.info(f"Summary:\n{summary(net_module.model, (exp_config.batch_size, rwkv_cfg.context_length), dtypes=[t.int64])}")
-
-            logger.info(f'Running on: {model_runner.accelerator}; Skipping initialisation?: {bool(kwargs)}')
+                log_config(mlflow.experiment,
+                           exp_config.mlflow_run_id,
+                           diff_cfg)
+                        
             model_runner.fit(net_module, datamodule=data_module, **kwargs)
             
         finally:

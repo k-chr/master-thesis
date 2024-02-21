@@ -67,8 +67,8 @@ class DIFF_RWKVBlock(nn.Module):
             self.ln0 = nn.LayerNorm(rwkv_config.embedding_size)
             
         self.ffn = RWKVChannelMix(rwkv_config, layer_id)
-        self.att = RWKVTimeMix(rwkv_config, layer_id)
-        self.cross_att = RWKVTimeMix(rwkv_config, layer_id, cross_att=True)
+        self.att = RWKVTimeMix(rwkv_config, layer_id, state_grad=rwkv_config.use_cache)
+        self.cross_att = RWKVTimeMix(rwkv_config, layer_id, state_grad=True)
 
         if diff_config.time_att:
             self.diff_time_projection = nn.Sequential(nn.Dropout(diff_config.time_dropout),
@@ -97,7 +97,7 @@ class DIFF_RWKVBlock(nn.Module):
                                       self_state.channel_mix_state if self_state else None)
         hidden_states = hidden_states + ffn_out
         
-        return hidden_states, BlockState(att_state, ffn_state) if self_state else None
+        return hidden_states, BlockState(att_state, ffn_state) if att_state and ffn_state else None
         
 
 class DIFF_RWKV(nn.Module):
