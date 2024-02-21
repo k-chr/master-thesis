@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.utilities.rank_zero import rank_zero_only
@@ -18,7 +18,7 @@ from diffccoder.model.diffusion.diffusion import GaussianDiffusion
 from diffccoder.model.diffusion.ema import EMA
 from diffccoder.model.rwkv.RWKVCM import RWKV
 from diffccoder.model.rwkv.initialization import RWKV_Init
-from diffccoder.utils.outputs import DiffusionLosses
+from diffccoder.utils.outputs import BlockStateList, DiffusionLosses
 from diffccoder.utils.l2wrap import L2Wrap
 
 
@@ -115,9 +115,9 @@ class DiffusionTrainingModule(TrainingBase):
         
         model: GaussianDiffusion = self.model if not use_ema else self.ema
         
-        diff_out: DiffusionLosses = model(x, y)
+        diff_out: tuple[DiffusionLosses, Optional[BlockStateList], t.Tensor, t.Tensor]  = model(x, y)
         
-        return diff_out, y
+        return diff_out[0], y
     
     def on_train_start(self) -> None:                        
         return super().on_train_start()
