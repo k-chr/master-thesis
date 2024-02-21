@@ -54,6 +54,9 @@ class BlockStateList:
         return BlockState(
             TimeMixState(self.shift_states[layer, 0], self.wkv_states[layer]),
             ChannelMixState(self.shift_states[layer, 1]))
+        
+    def subset(self, ids: t.Tensor):
+        return BlockStateList(self.shift_states[:, :, ids, :], self.wkv_states[:, ids, :, :])
 
     def __setitem__(self, layer: int, state: BlockState):
         self.shift_states[layer, 0] = state.time_mix_state.shift_state
