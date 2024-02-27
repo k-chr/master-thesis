@@ -173,7 +173,12 @@ class DiffTrainingCommand(Command):
             
             ckpt_path: Path = ckpt_dir / last_ckpt_fname
             kwargs = {'ckpt_path':ckpt_path} if ckpt_path.is_file() else {}
-            if not exp_config.from_pretrained:
+            if exp_config.from_pretrained:
+                net_module = DiffusionTrainingModule(optim_cfg, rwkv_cfg, diff_cfg, skip_init=True, from_pretrained=exp_config.from_pretrained)
+                kwargs = {}
+            elif kwargs:
+                net_module = DiffusionTrainingModule(optim_cfg, rwkv_cfg, diff_cfg, skip_init=True)              
+            else:
                 if not ckpt_dir.exists():
                     ckpt_dir.mkdir(exist_ok=True)
                 
@@ -182,10 +187,6 @@ class DiffTrainingCommand(Command):
                     net_module = DiffusionTrainingModule(optim_cfg, rwkv_cfg, diff_cfg, skip_init=False, init_path=init_path)
                 else:
                     net_module = DiffusionTrainingModule(optim_cfg, rwkv_cfg, diff_cfg, skip_init=True, init_path=init_path)
-            elif not kwargs:
-                net_module = DiffusionTrainingModule(optim_cfg, rwkv_cfg, diff_cfg, skip_init=True, from_pretrained=exp_config.from_pretrained)
-            else:
-                net_module = DiffusionTrainingModule(optim_cfg, rwkv_cfg, diff_cfg, skip_init=True)              
 
 #            logger.info(f"Summary:\n{summary(net_module.model, [(exp_config.batch_size, rwkv_cfg.context_length), (exp_config.batch_size, rwkv_cfg.context_length)], dtypes=[t.int64, t.int64])}")
             logger.info(f'Running on: {model_runner.accelerator}; Skipping initialization?: {bool(kwargs)}')
