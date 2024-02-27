@@ -25,7 +25,7 @@ class NPYCLMDataset(Dataset):
 
         self.dir_list = get_dir_list_from_file(list_dir_path=sub_dir_list_file)
         self.in_dir = in_dir
-        self.prefic_lm = prefix_lm
+        self.prefix_lm = prefix_lm
         self.pad_id = pad_id
         
         self.__load_mmaps()
@@ -89,9 +89,12 @@ class NPYCLMDataset(Dataset):
         except IndexError as _:
             logger.info(f'RANK: {rank_zero_only.rank} For _index: {_index}, index: {index} found obj: {obj}')
             raise IndexError(f'RANK: {rank_zero_only.rank} For _index: {_index}, index: {index} found obj: {obj}')
-        data: t.Tensor = t.from_numpy(arr.astype(np.uint16))
+        arr = arr.astype(np.uint16)
+        if self.prefix_lm:
+            arr= process_arr(arr)
+        data: t.Tensor = t.from_numpy(arr)
 
-        if self.prefic_lm:
+        if self.prefix_lm:
             l = data.shape[-1]
             x, y = data[:l//2], data[l//2:]
             assert x.shape == y.shape
@@ -99,3 +102,17 @@ class NPYCLMDataset(Dataset):
             x, y = data[:-1], data[1:].clone()
 
         return index, x, y
+
+def process_arr(arr:np.ndarray):
+    pad_id = 1
+    eos_id = 0
+    orig_len = arr.shape[-1]
+    mask = ((arr == pad_id) | (arr == eos_id))
+    good = arr[~mask]
+    l = good.shape[-1]
+    good_1, good_2 = good[:l//2], good[l//2:]
+    
+    pad = np.ones(orig_len//2 - good_1.shape[-1])
+    eos = np.zeros(orig_len//2 - good_2.shape[-1])
+    
+    return np.concatenate((good_1, pad, good_2, eos))

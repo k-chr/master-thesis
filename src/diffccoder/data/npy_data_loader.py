@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Literal
 
 from lightning.pytorch import LightningDataModule
+from lightning.pytorch.utilities.types import EVAL_DATALOADERS
 import torch as t
 from torch.utils.data import DataLoader, random_split
 
@@ -19,17 +20,21 @@ class NPYZDataModule(LightningDataModule):
                  num_workers: int | None = None,
                  batch_size: int = 1,
                  val_batch_size: int = 1,
+                 test_batch_size: int = 1,
                  mode: Literal['npz', 'npy'] = 'npy',
                  prefix_lm: bool = False,
-                 pad_id: int | None = None) -> None:
+                 pad_id: int | None = None,
+                 dir_list_for_infer: Path = None) -> None:
         super().__init__()
         self.root = in_dir
         self.npyz_to_select = dir_list_txt
+        self.npyz_to_select_infer = dir_list_for_infer
         self.val_ratio = split_val_ratio
         self.use_pinned_mem = use_pinned_memory
         self.num_workers = num_workers
         self.batch_size = batch_size
         self.val_batch_size = val_batch_size
+        self.test_batch_size = test_batch_size
         self.prepare_data_per_node = False
         self.allow_zero_length_dataloader_with_multiple_devices = True
         self.prefix_lm = prefix_lm
@@ -51,9 +56,19 @@ class NPYZDataModule(LightningDataModule):
                    batch_size=self.val_batch_size,
                    pin_memory=self.use_pinned_mem,
                    persistent_workers=True)
-
+        
+    def test_dataloader(self) -> DataLoader:
+        return self.predict_dataloader()
+    
+    def predict_dataloader(self) -> DataLoader:
+        return DataLoader(self.test_npz,
+                          shuffle=False,
+                          num_workers=self.num_workers,
+                          pin_memory=self.use_pinned_mem,
+                          persistent_workers=True)
+        
     def setup(self, stage: str) -> None:
-        if stage == "fit" or stage is None:
+        if stage == 'fit' or stage is None:
             match (mode:=self.mode):
                 case 'npz':
                     npyz_all = NPZFineTuneDataset(self.root, self.npyz_to_select, pad_id=self.pad_id)
@@ -66,5 +81,6 @@ class NPYZDataModule(LightningDataModule):
                                                           [1 - self.val_ratio, self.val_ratio],
                                                           generator=generator)
             
-        if stage == "test":
-            assert False, 'Currently no test data'
+        if stage == 'test' or stage == 'predict':
+            self.test_npz = NPZFineTuneDataset(self.root, self.npyz_to_select_infer, pad_id=self.pad_id, test=True)
+            

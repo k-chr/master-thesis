@@ -12,8 +12,8 @@ class DiffusionConfig(BaseConfig):
     rescale_timesteps: bool = False
     self_condition: bool = False
     timesteps: int = 3000
-    gen_timesteps: int = 3000
-    skip_timesteps: int = 1000
+    gen_timesteps: int = 30 #discretize DDIM sampling steps to that value
+    skip_timesteps: int = 100 #skip sample step by this value in skip sampling
     ddim_eta: float = 0
     tgt_len: int = 1024
     time_att: bool = True
@@ -30,3 +30,5 @@ class DiffusionConfig(BaseConfig):
     update_ema_every: int = 200
     encoder_path: Path | None = None
     freeze_encoder: bool = False
+    clip_denoised: bool = True
+    return_all_timesteps: bool = True

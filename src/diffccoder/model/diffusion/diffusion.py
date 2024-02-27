@@ -1,6 +1,6 @@
 from functools import partial
 from random import random
-from typing import Optional
+from typing import Callable, Optional
 
 from einops import rearrange, reduce
 import torch as t
@@ -159,20 +159,23 @@ class GaussianDiffusion(nn.Module):
     def p_mean_variance(self,
                         x: t.Tensor,
                         timestep: t.Tensor,
-                        encoder_hidden_states: t.Tensor,
+                        encoder_hidden_state: t.Tensor,
                         encoder_state: BlockStateList,
                         x_self_cond: Optional[t.Tensor] = None,
                         clip_denoised: bool = True,
-                        diff_state: Optional[BlockStateList] =None):
+                        diff_state: Optional[BlockStateList] =None,
+                        denoised_fn: Optional[Callable[[t.Tensor], t.Tensor]]=None):
         
         preds, new_state = self.model_predictions(x, 
                                                   timestep,
-                                                  encoder_hidden_states,
+                                                  encoder_hidden_state,
                                                   encoder_wkv_states=encoder_state,
                                                   x_self_cond=x_self_cond,
                                                   diff_state=diff_state)
         x_start = preds.pred_x_start
-
+        
+        if denoised_fn is not None:
+            x_start = denoised_fn(x_start)
         if clip_denoised:
             x_start.clamp_(-1., 1.)
 

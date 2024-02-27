@@ -7,6 +7,7 @@ from diffccoder.commands.data.tokenize_dante import TokenizeDanteCommand
 from diffccoder.commands.data.tokenize_files import TokenizeFilesCommand
 from diffccoder.commands.data.train_tokenizer import TrainTokenizerCommand
 from diffccoder.commands.model.run_fine_tuning import DiffFineTuningCommand
+from diffccoder.commands.model.run_inference import InferCommand
 from diffccoder.commands.model.run_pretraining import PreTrainingCommand
 from diffccoder.commands.model.run_diffusion_training import DiffTrainingCommand
 from diffccoder.commands.other.generate_template_yamls import GenerateTemplateYamlsCommand
@@ -24,6 +25,7 @@ app.add(TrainTokenizerCommand())
 app.add(PreTrainingCommand())
 app.add(DiffTrainingCommand())
 app.add(DiffFineTuningCommand())
+app.add(InferCommand())
 app.add(GenerateTemplateYamlsCommand())
 app.add(CreateExperimentCommand())
 app.add(CreateOrCloneRunCommand())
