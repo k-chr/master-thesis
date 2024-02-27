@@ -133,11 +133,11 @@ class DIFF_RWKV(nn.Module):
         register_buffer_to_type(self, 'position_ids', t.arange(diff_config.tgt_len).expand((1, -1)), dtype=t.int32)
         self.positional_embedding = nn.Embedding(diff_config.tgt_len, rwkv_config.embedding_size)
         
-        self.emb = nn.Embedding(rwkv_config.vocab_size, rwkv_config.embedding_size, padding_idx=rwkv_config.pad_token_id)
+        self.emb = nn.Embedding(rwkv_config.vocab_size, rwkv_config.embedding_size)
         self.head = nn.Linear(rwkv_config.embedding_size, rwkv_config.vocab_size, bias=False)
         
         with t.inference_mode():
-            self.head.weight - self.emb.weight
+            self.head.weight = self.emb.weight
         
         if diff_config.self_condition:
             self.input_up_proj = nn.Sequential(

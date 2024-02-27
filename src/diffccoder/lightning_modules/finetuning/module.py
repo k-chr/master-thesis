@@ -88,8 +88,8 @@ class DiffusionFineTuningModule(TrainingBase):
         _, x, y = batch
     
         y = y.long()
-        y1, y2, y2_mask = y[:, :1024], y[:, 1024:], ~(y[:, 1024:] == 1).all(-1)
-        print(y2_mask.detach().sum(), y2_mask.shape)
+        ctx_len = self.rwkv_config.context_length
+        y1, y2, y2_mask = y[:, :ctx_len], y[:, ctx_len:], ~(y[:, ctx_len:] == 1).all(-1)
         y1_mask = t.ones_like(y2_mask)
         
         state = BlockStateList.create(self.rwkv_config.num_hidden_layers,
