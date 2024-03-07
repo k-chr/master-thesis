@@ -26,12 +26,14 @@ class DiffusionFineTuningModule(TrainingBase):
                  optimization_config: OptimizationConfig,
                  rwkv_config: RWKVConfig,
                  diff_config: DiffusionConfig,
-                 from_pretrained: Path) -> None:
+                 from_pretrained: Path = None,
+                 ema_dir: Path = None) -> None:
         super().__init__(optimization_config)
         self.rwkv_config = rwkv_config
         self.diff_config = diff_config
         self.from_pretrained = from_pretrained
-
+        self.ema_dir = ema_dir
+        
         os.environ['CTX_LEN'] = str(rwkv_config.context_length)
         os.environ['USE_CACHE'] = str(int(rwkv_config.use_cache and not self.training))
         
@@ -131,8 +133,11 @@ class DiffusionFineTuningModule(TrainingBase):
     
     @rank_zero_only
     def init_ema(self):
-        checkpoint_callback: ModelCheckpoint = self.trainer.checkpoint_callback
-        ema_path = Path(checkpoint_callback.last_model_path).parent
+        if self.ema_dir is not None:
+            ema_path = self.ema_dir
+        else:
+            checkpoint_callback: ModelCheckpoint = self.trainer.checkpoint_callback
+            ema_path = Path(checkpoint_callback.last_model_path).parent
         ema_path /= 'ema.pt'
         self.ema = EMA(beta=self.diff_config.ema_beta,
                        update_after_step=self.diff_config.update_ema_every,
@@ -140,7 +145,7 @@ class DiffusionFineTuningModule(TrainingBase):
                        model=self.model,
                        ema_path=ema_path)
         
-        if ema_path.is_file() and not (len(ema_path.parents) == 1 and ema_path.parents[0].__str__() == '.'):
+        if ema_path.is_file() and ema_path.exists() and not (len(ema_path.parents) == 1 and ema_path.parents[0].__str__() == '.'):
             self.ema.load()
         elif self.from_pretrained is not None:
             ema_pretrained = self.from_pretrained.parent / 'ema.pt'

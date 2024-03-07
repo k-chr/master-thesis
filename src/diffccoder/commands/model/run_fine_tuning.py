@@ -175,9 +175,9 @@ class DiffFineTuningCommand(Command):
             ckpt_path: Path = ckpt_dir / last_ckpt_fname
             kwargs = {'ckpt_path':ckpt_path} if ckpt_path.is_file() else {}
             if not exp_config.from_pretrained:
-                net_module = DiffusionFineTuningModule(optim_cfg, rwkv_cfg, diff_cfg)
+                net_module = DiffusionFineTuningModule(optim_cfg, rwkv_cfg, diff_cfg, ema_dir=ckpt_dir)
             else:
-                net_module = DiffusionFineTuningModule(optim_cfg, rwkv_cfg, diff_cfg, from_pretrained=exp_config.from_pretrained)           
+                net_module = DiffusionFineTuningModule(optim_cfg, rwkv_cfg, diff_cfg, from_pretrained=exp_config.from_pretrained, ema_dir=ckpt_dir)           
 
 #            logger.info(f"Summary:\n{summary(net_module.model, [(exp_config.batch_size, rwkv_cfg.context_length), (exp_config.batch_size, rwkv_cfg.context_length)], dtypes=[t.int64, t.int64])}")
             logger.info(f'Running on: {model_runner.accelerator}; Skipping initialization?: {bool(kwargs)}')
