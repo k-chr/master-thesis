@@ -127,9 +127,14 @@ class InferCommand(Command):
         
         ckpt_path: Path = ckpt_dir / last_ckpt_fname
         ema_path = ckpt_dir / 'ema.pt' if ckpt_path.is_file() else None
-        kwargs = {'ckpt_path':ckpt_path} if ckpt_path.is_file() else {}
+        best_path = ckpt_dir / 'best_on_val_loss.ckpt' if ckpt_path.is_file() else None
+        kwargs = {'ckpt_path':best_path} if ckpt_path.is_file() else {}
         if not exp_config.from_pretrained:
-            net_module = DiffusionInferModule(rwkv_cfg, diff_cfg, tokenizer=tokenizer, ema_local_path=ema_path)
+            net_module = DiffusionInferModule(rwkv_cfg,
+                                              diff_cfg,
+                                              tokenizer=tokenizer,
+                                              ema_local_path=ema_path,
+                                              from_pretrained=best_path)
         else:
             net_module = DiffusionInferModule(rwkv_cfg,
                                               diff_cfg,
