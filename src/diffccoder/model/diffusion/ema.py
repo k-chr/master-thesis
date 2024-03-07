@@ -142,6 +142,8 @@ class EMA(Module):
 
     def save(self):
         if (p := self.get_path()) is not None:
+            if not p.parent.exists():
+                p.parent.mkdir(exist_ok=True)
             state_dict = self.state_dict()
             torch.save(state_dict, p)
 

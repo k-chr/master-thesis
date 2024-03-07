@@ -26,7 +26,7 @@ class DiffusionFineTuningModule(TrainingBase):
                  optimization_config: OptimizationConfig,
                  rwkv_config: RWKVConfig,
                  diff_config: DiffusionConfig,
-                 from_pretrained: Path,
+                 from_pretrained: Path = None,
                  ema_dir: Path = None) -> None:
         super().__init__(optimization_config)
         self.rwkv_config = rwkv_config
