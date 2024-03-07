@@ -1,11 +1,12 @@
 from functools import partial
 import os
+import pathlib
 from pathlib import Path
+import platform
 
 from lightning import LightningModule
 from tokenizers import Tokenizer
 import torch as t
-import torch.nn.functional as F
 
 from diffccoder.configs.diffusion_config import DiffusionConfig
 from diffccoder.configs.rwkv_config import RWKVConfig
@@ -37,6 +38,11 @@ class DiffusionInferModule(LightningModule):
         os.environ['CTX_LEN'] = str(rwkv_config.context_length)
         os.environ['USE_CACHE'] = str(int(rwkv_config.use_cache and not self.training))
         
+        if platform.system() != "Windows":
+            pathlib.WindowsPath = pathlib.PosixPath
+        else:
+            pathlib.PosixPath = pathlib.WindowsPath
+            
         encoder = RWKV(self.rwkv_config)
         decoder = DIFF_RWKV(diff_config=self.diff_config, rwkv_config=self.rwkv_config)
                    
@@ -58,14 +64,17 @@ class DiffusionInferModule(LightningModule):
         if not self.diff_config.return_all_timesteps:
             maybe_samples = [maybe_samples]
         for sample in maybe_samples:
-            logits = t.nan_to_num(self.sampler.diffusion.model.get_logits(sample))
+            logits = self.sampler.diffusion.model.get_logits(sample).cpu()
             #logits[:, :, 0] = -9999
             
-            #print(logits)
-            probs = F.softmax(logits, -1)
-            probs = probs[0].pow(1)
-            sample_id_tensor = t.multinomial(probs/probs.sum(-1, keepdim=True), num_samples=1).flatten()#   t.argmax(logits, dim=-1) #
-            decoded.append(self.tokenizer.decode_batch([sample_id_tensor.cpu().tolist()]))
+            print(logits[logits.isnan()].shape, logits.shape)
+            # probs = F.softmax(logits, -1)
+            # probs = probs[0].pow(1)
+            #ids = t.argmax(logits, dim=-1)
+            #print(ids.shape)
+            sample_id_tensor = t.argmax(logits, dim=-1) # t.multinomial(probs/probs.sum(-1, keepdim=True), num_samples=1).flatten()#   
+            print(sample_id_tensor.shape)
+            decoded.append(self.tokenizer.decode_batch(sample_id_tensor.tolist()))
         return decoded
     
     def _process_batch(self, batch: t.Tensor):
@@ -91,10 +100,10 @@ class DiffusionInferModule(LightningModule):
                                     encoder.config.embedding_size,
                                     indices.device,
                                     next(encoder.parameters()).dtype)
-        # for i in range(indices.shape[1]):
-        #     output: RWKVOutput = encoder(indices[:, :i+1], ctx)
-        output: RWKVOutput = encoder(indices, ctx)
-        ctx = output.state
+        for i in range(indices.shape[1]):
+            output: RWKVOutput = encoder(indices[:, :i+1], ctx)
+        #output: RWKVOutput = encoder(indices, ctx)
+            ctx = output.state
         return ctx, output.last_hidden_state
     
     def init_ema(self):
