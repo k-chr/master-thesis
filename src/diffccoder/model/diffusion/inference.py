@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import math
 from typing import Callable
+from loguru import logger
 
 import torch as t
 from torch import nn
@@ -131,10 +132,10 @@ class DDIM(InferenceSampler):
         alpha_bar = extract(self.diffusion.alpha_buffers.cumprod, timestep, x.shape)
         alpha_bar_prev = extract(self.diffusion.alpha_buffers.cumprod, next_timestep, x.shape)
         
-        sigma = (eta * t.sqrt((1 - alpha_bar_prev) / (1 - alpha_bar)) * t.sqrt(1 - alpha_bar / alpha_bar_prev))
+        sigma = (eta * t.sqrt((1 - alpha_bar_prev) / (1 - alpha_bar+1e-7) + 1e-7) * t.sqrt(1 - alpha_bar / (alpha_bar_prev + 1e-7)))
 
         # Equation 12.
-        mean_pred = (x_start * t.sqrt(alpha_bar_prev) + t.sqrt(1 - alpha_bar_prev - sigma ** 2) * eps)
+        mean_pred = (x_start * t.sqrt(alpha_bar_prev + 1e-7) + t.sqrt(1 - alpha_bar_prev - sigma ** 2 + 1e-7) * eps)
         noise = t.randn_like(x) 
         mask = t.full((b,), int(next_timestep != 0), device=device, dtype=x.dtype) if isinstance(next_timestep, int) else (next_timestep != 0).to(x.dtype).unsqueeze(-1)
         pred_latent = mean_pred + sigma * noise * mask
@@ -323,16 +324,16 @@ class PSkipSampler(InferenceSampler):
                                              denoised_fn=denoised_fn)
         
         model_mean, _, model_log_variance, x_start, new_state_list = out
-        
+
         alpha_nt = extract(self.diffusion.alpha_buffers.cumprod, next_timestep, x.shape)
         alpha_t = extract(self.diffusion.alpha_buffers.cumprod, timestep, x.shape)
-        t_div_nt = alpha_t / alpha_nt
-        one_minus_nt_div_t = (1 - alpha_nt) / (1 - alpha_t)
-        
-        model_mean = t_div_nt.sqrt() * one_minus_nt_div_t * x + alpha_nt.sqrt() * (1 - alpha_t / alpha_nt) / (1 - alpha_t) * x_start
+        t_div_nt = alpha_t / (alpha_nt + 1e-7)
+        one_minus_nt_div_t = (1 - alpha_nt) / (1 - alpha_t + 1e-7)
+
+        model_mean = (t_div_nt + 1e-7).sqrt() * one_minus_nt_div_t * x + (alpha_nt+ 1e-7).sqrt() * (1 - alpha_t / (alpha_nt + + 1e-7)) / (1 - alpha_t + 1e-7) * x_start
         model_variance = (1 - t_div_nt) * one_minus_nt_div_t
-        model_log_variance = model_variance.log()
         
+        model_log_variance = (model_variance + 1e-7).log()
         noise = t.randn_like(x)
         mask = t.full((b,), int(next_timestep != 0), device=device, dtype=x.dtype) if isinstance(next_timestep, int) else (next_timestep != 0).to(x.dtype).unsqueeze(-1)
         
@@ -386,7 +387,12 @@ class PSkipSampler(InferenceSampler):
                                                self.diffusion.device,
                                                t.float32)
             for i in range(times_forward):
-
+                logger.info(f"Latent at {i} before forward and {src_i}, {tgt_i} timesteps, value range: [{latent.min()}, {latent.max()}]")
+                diff_state = BlockStateList.create(self.diffusion.model.rwkv_config.num_hidden_layers,
+                                               shape[0],
+                                               self.diffusion.model.rwkv_config.embedding_size,
+                                               self.diffusion.device,
+                                               t.float32)
                 self_cond = x_start if self.config.self_condition else None
                 new_latent, _, x_start, state  = self.sample(latent[:, i*fixed_len:min(shape[1]-i*fixed_len, fixed_len), :],
                                                              src_t[:, i*fixed_len:min(shape[1]-i*fixed_len, fixed_len)],
@@ -396,9 +402,9 @@ class PSkipSampler(InferenceSampler):
                                                              x_self_cond=self_cond,
                                                              diff_state=diff_state,
                                                              denoised_fn=denoised_fn)
-                diff_state = state
-
+                del diff_state, state
                 latent[:, i*fixed_len:min(shape[1]-i*fixed_len, fixed_len), :] = new_latent
+                logger.info(f"Latent at {i} forward and {src_i}, {tgt_i} timesteps, value range: [{latent.min()}, {latent.max()}]")
             latent_samples.append(latent)
 
         ret = latent if not return_all_timesteps else t.stack(latent_samples, dim = 1)

@@ -25,7 +25,12 @@ class TrainingBase(LightningModule):
     
     def configure_optimizers(self) -> dict[str, Optimizer | dict[str, LRScheduler | int | str]] | Optimizer:
         optim_groups = self._compute_optim_groups()
-            
+        
+        if self.config.lr_scheduler is LRSchedulerType.NONE:
+            for group in optim_groups:
+                if (key := 'my_lr_scale') in group:
+                    group['lr'] = self.config.lr_base * group[key]
+        
         optimizer: t.optim.Optimizer = self.__configure_optimizer(optim_groups)
             
         scheduler_aux_config, scheduler = self.__configure_scheduler(optimizer)

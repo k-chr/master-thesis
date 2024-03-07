@@ -31,4 +31,4 @@ class DiffusionConfig(BaseConfig):
     encoder_path: Path | None = None
     freeze_encoder: bool = False
     clip_denoised: bool = True
-    return_all_timesteps: bool = True
+    return_all_timesteps: bool = False
