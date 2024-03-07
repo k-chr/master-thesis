@@ -269,7 +269,7 @@ class GaussianDiffusion(nn.Module):
 
         mse_loss = reduce(t.where(t0_mask, t0_loss, mse_loss), 'b s ... -> b s', 'mean')
         
-        x_output = preds.pred_x_start if self.config.objective is DiffusionModelType.START_X else x_start
+        x_output = x_start #preds.pred_x_start if self.config.objective is DiffusionModelType.START_X else x_start
         
         out_mean, _, _ = self.q_mean_variance(x_output, t.full((tgt_indices.shape[0], x_start_mean.shape[1]), fill_value=self.config.timesteps - 1, device=x_start_mean.device, dtype=t.int64))
         tT_loss = (out_mean ** 2)
