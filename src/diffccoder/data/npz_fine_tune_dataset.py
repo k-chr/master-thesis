@@ -84,8 +84,8 @@ class NPZFineTuneDataset(Dataset):
                 raise IndexError(f'RANK: {rank_zero_only.rank} Num partitions = {len(self._part_indices)}: For _index: {_index}, index: {index} found _id: {_id}')
             try:
                 mmap: np.memmap = self.mmaps[obj.index]
-                y: np.ndarray = mmap['y'][_index-obj.lower]
-                x: np.ndarray = mmap['x']
+                y: np.ndarray = remove_special_tokens_from_array(mmap['y'][_index-obj.lower], pad=True)
+                x: np.ndarray = remove_special_tokens_from_array(mmap['x'])
             except IndexError as _:
                 logger.info(f'RANK: {rank_zero_only.rank} For _index: {_index}, index: {index} found obj: {obj}')
                 raise IndexError(f'RANK: {rank_zero_only.rank} For _index: {_index}, index: {index} found obj: {obj}')
@@ -99,12 +99,12 @@ class NPZFineTuneDataset(Dataset):
             
             return _index, x_t, t.empty(1)
         
-def remove_special_tokens_from_array(arr:np.ndarray):
+def remove_special_tokens_from_array(arr:np.ndarray, pad=True):
     pad = 1
     eos = 0
     
     mask = ((arr == pad) | (arr == eos))
     good = arr[~mask]
-    bad = np.ones_like(arr[mask])
+    bad = np.ones_like(arr[mask]) if pad else np.zeros_like(arr[mask])
     
-    return np.concatenate((bad, good))
+    return np.concatenate((good, bad))
