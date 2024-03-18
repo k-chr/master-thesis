@@ -84,7 +84,7 @@ class NPZFineTuneDataset(Dataset):
                 raise IndexError(f'RANK: {rank_zero_only.rank} Num partitions = {len(self._part_indices)}: For _index: {_index}, index: {index} found _id: {_id}')
             try:
                 mmap: np.memmap = self.mmaps[obj.index]
-                y: np.ndarray = remove_special_tokens_from_array(mmap['y'][_index-obj.lower], pad=True)
+                y: np.ndarray = remove_special_tokens_from_array(mmap['y'][_index-obj.lower], pad=False)
                 x: np.ndarray = remove_special_tokens_from_array(mmap['x'])
             except IndexError as _:
                 logger.info(f'RANK: {rank_zero_only.rank} For _index: {_index}, index: {index} found obj: {obj}')

@@ -90,6 +90,7 @@ class DiffusionFineTuningModule(TrainingBase):
         _, x, y = batch
     
         y = y.long()
+
         ctx_len = self.rwkv_config.context_length
         y1, y2, y2_mask = y[:, :ctx_len], y[:, ctx_len:], ~(y[:, ctx_len:] == 0).all(-1)
         y1_mask = t.ones_like(y2_mask)
