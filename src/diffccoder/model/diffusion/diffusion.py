@@ -177,7 +177,7 @@ class GaussianDiffusion(nn.Module):
         if denoised_fn is not None:
             x_start = denoised_fn(x_start)
         if clip_denoised:
-            x_start.clamp_(-1., 1.)
+            x_start = t.clamp(x_start, -1., 1.)
 
         model_mean, posterior_variance, posterior_log_variance = self.q_posterior(x_start = x_start, x_t = x, timestep = timestep)
         model_mean = model_mean if self.config.objective is not DiffusionModelType.PREVIOUS_X else preds.pred_x_prev

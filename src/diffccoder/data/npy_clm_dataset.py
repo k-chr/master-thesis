@@ -91,7 +91,9 @@ class NPYCLMDataset(Dataset):
             raise IndexError(f'RANK: {rank_zero_only.rank} For _index: {_index}, index: {index} found obj: {obj}')
         arr = arr.astype(np.uint16)
         if self.prefix_lm:
-            arr= process_arr(arr)
+            arr = process_arr(arr)
+        else:
+            arr = clear_pad(arr)
         data: t.Tensor = t.from_numpy(arr)
 
         if self.prefix_lm:
@@ -116,3 +118,13 @@ def process_arr(arr:np.ndarray):
     eos = np.zeros(orig_len//2 - good_2.shape[-1])
     
     return np.concatenate((good_1, pad, good_2, eos))
+
+def clear_pad(arr:np.ndarray):
+    pad_id = 1
+    eos_id = 0
+    orig_len = arr.shape[-1]
+    mask = ((arr == pad_id) | (arr == eos_id))
+    good = arr[~mask]
+    
+    eos = np.zeros(orig_len - good.shape[-1])
+    return np.concatenate((good, eos))

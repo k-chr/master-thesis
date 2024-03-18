@@ -71,8 +71,8 @@ class InferenceSampler(ABC):
                     device: t.device, 
                     end_point: t.Tensor, 
                     x_cord_start: t.Tensor,
-                    timestep: int) -> t.Tensor:
-        timestep: t.Tensor = t.tensor([timestep] * shape[0], device=device)
+                    timestep: int | t.Tensor) -> t.Tensor:
+        timestep: t.Tensor = t.tensor([timestep] * shape[0], device=device) if not isinstance(timestep, t.Tensor) else timestep
 
         middle_point = t.stack([t.clamp((shape[1] - 1) - timestep, 0), t.clamp(timestep - (shape[1] - 1), 0)], dim=-1)
         middle_point = middle_point.unsqueeze(-1)
@@ -132,10 +132,10 @@ class DDIM(InferenceSampler):
         alpha_bar = extract(self.diffusion.alpha_buffers.cumprod, timestep, x.shape)
         alpha_bar_prev = extract(self.diffusion.alpha_buffers.cumprod, next_timestep, x.shape)
         
-        sigma = (eta * t.sqrt((1 - alpha_bar_prev) / (1 - alpha_bar+1e-7) + 1e-7) * t.sqrt(1 - alpha_bar / (alpha_bar_prev + 1e-7)))
+        sigma = (eta * t.sqrt((1 - alpha_bar_prev) / (1 - alpha_bar+1e-8) + 1e-8) * t.sqrt(1 - alpha_bar / (alpha_bar_prev + 1e-8)))
 
         # Equation 12.
-        mean_pred = (x_start * t.sqrt(alpha_bar_prev + 1e-7) + t.sqrt(1 - alpha_bar_prev - sigma ** 2 + 1e-7) * eps)
+        mean_pred = (x_start * t.sqrt(alpha_bar_prev + 1e-8) + t.sqrt(1 - alpha_bar_prev - sigma ** 2 + 1e-8) * eps)
         noise = t.randn_like(x) 
         mask = t.full((b,), int(next_timestep != 0), device=device, dtype=x.dtype) if isinstance(next_timestep, int) else (next_timestep != 0).to(x.dtype).unsqueeze(-1)
         pred_latent = mean_pred + sigma * noise * mask
@@ -190,16 +190,16 @@ class DDIM(InferenceSampler):
             for i in range(times_forward):
 
                 self_cond = x_start if self.config.self_condition else None
-                new_latent, _, x_start, state  = self.sample(latent[:, i*fixed_len:min(shape[1]-i*fixed_len, fixed_len), :],
-                                                             src_t[:, i*fixed_len:min(shape[1]-i*fixed_len, fixed_len)],
-                                                             tgt_t[:, i*fixed_len:min(shape[1]-i*fixed_len, fixed_len)],
+                new_latent, _, x_start, state  = self.sample(latent[:, i*fixed_len:(i*fixed_len)+min(shape[1]-i*fixed_len, fixed_len), :],
+                                                             src_t[:,  i*fixed_len:(i*fixed_len)+min(shape[1]-i*fixed_len, fixed_len)],
+                                                             tgt_t[:,  i*fixed_len:(i*fixed_len)+min(shape[1]-i*fixed_len, fixed_len)],
                                                              encoder_hidden_state=encoder_hidden_state,
                                                              encoder_state=encoder_layer_state,
                                                              x_self_cond=self_cond,
                                                              diff_state=diff_state,
                                                              denoised_fn=denoised_fn)
                 diff_state = state
-                latent[:, i*fixed_len:min(shape[1]-i*fixed_len, fixed_len), :] = new_latent
+                latent[:, i*fixed_len:(i*fixed_len) + min(shape[1]-i*fixed_len, fixed_len), :] = new_latent
             latent_samples.append(latent)
 
         ret = latent if not return_all_timesteps else t.stack(latent_samples, dim = 1)
@@ -248,8 +248,8 @@ class PSampler(InferenceSampler):
                                                t.float32)
             for i in range(times_forward):
                 
-                new_latent, _, x_start, state = self.sample(latent[:, i*fixed_len:min(shape[1]-i*fixed_len, fixed_len), :],
-                                                            timestep[:, i*fixed_len:min(shape[1]-i*fixed_len, fixed_len)], 
+                new_latent, _, x_start, state = self.sample(latent[:, i*fixed_len:i*fixed_len+min(shape[1]-i*fixed_len, fixed_len), :],
+                                                            timestep[:, i*fixed_len:i*fixed_len+min(shape[1]-i*fixed_len, fixed_len)], 
                                                             encoder_hidden_state, 
                                                             encoder_layer_state, 
                                                             self_cond,
@@ -258,7 +258,7 @@ class PSampler(InferenceSampler):
                 
                 diff_state = state
 
-                latent[:, i*fixed_len:min(shape[1]-i*fixed_len, fixed_len), :] = new_latent
+                latent[:, i*fixed_len:i*fixed_len+min(shape[1]-i*fixed_len, fixed_len), :] = new_latent
                           
             latent_samples.append(latent)
 
@@ -327,13 +327,13 @@ class PSkipSampler(InferenceSampler):
 
         alpha_nt = extract(self.diffusion.alpha_buffers.cumprod, next_timestep, x.shape)
         alpha_t = extract(self.diffusion.alpha_buffers.cumprod, timestep, x.shape)
-        t_div_nt = alpha_t / (alpha_nt + 1e-7)
-        one_minus_nt_div_t = (1 - alpha_nt) / (1 - alpha_t + 1e-7)
+        t_div_nt = alpha_t / (alpha_nt + 1e-8)
+        one_minus_nt_div_t = (1 - alpha_nt) / (1 - alpha_t + 1e-8)
 
-        model_mean = (t_div_nt + 1e-7).sqrt() * one_minus_nt_div_t * x + (alpha_nt+ 1e-7).sqrt() * (1 - alpha_t / (alpha_nt + + 1e-7)) / (1 - alpha_t + 1e-7) * x_start
+        model_mean = (t_div_nt + 1e-7).sqrt() * one_minus_nt_div_t * x + (alpha_nt+ 1e-7).sqrt() * (1 - alpha_t / (alpha_nt + 1e-7)) / (1 - alpha_t + 1e-7) * x_start
         model_variance = (1 - t_div_nt) * one_minus_nt_div_t
         
-        model_log_variance = (model_variance + 1e-7).log()
+        model_log_variance = (model_variance + 1e-8).log()
         noise = t.randn_like(x)
         mask = t.full((b,), int(next_timestep != 0), device=device, dtype=x.dtype) if isinstance(next_timestep, int) else (next_timestep != 0).to(x.dtype).unsqueeze(-1)
         
@@ -388,25 +388,21 @@ class PSkipSampler(InferenceSampler):
                                                t.float32)
             for i in range(times_forward):
                 logger.info(f"Latent at {i} before forward and {src_i}, {tgt_i} timesteps, value range: [{latent.min()}, {latent.max()}]")
-                diff_state = BlockStateList.create(self.diffusion.model.rwkv_config.num_hidden_layers,
-                                               shape[0],
-                                               self.diffusion.model.rwkv_config.embedding_size,
-                                               self.diffusion.device,
-                                               t.float32)
+
                 self_cond = x_start if self.config.self_condition else None
-                new_latent, _, x_start, state  = self.sample(latent[:, i*fixed_len:min(shape[1]-i*fixed_len, fixed_len), :],
-                                                             src_t[:, i*fixed_len:min(shape[1]-i*fixed_len, fixed_len)],
-                                                             tgt_t[:, i*fixed_len:min(shape[1]-i*fixed_len, fixed_len)],
+                new_latent, _, x_start, state  = self.sample(latent[:, i*fixed_len:(i*fixed_len)+min(shape[1]-i*fixed_len, fixed_len), :],
+                                                             src_t[:, i*fixed_len:(i*fixed_len)+min(shape[1]-i*fixed_len, fixed_len)],
+                                                             tgt_t[:, i*fixed_len:(i*fixed_len)+min(shape[1]-i*fixed_len, fixed_len)],
                                                              encoder_hidden_state=encoder_hidden_state,
                                                              encoder_state=encoder_layer_state,
                                                              x_self_cond=self_cond,
                                                              diff_state=diff_state,
                                                              denoised_fn=denoised_fn)
-                del diff_state, state
-                latent[:, i*fixed_len:min(shape[1]-i*fixed_len, fixed_len), :] = new_latent
-                logger.info(f"Latent at {i} forward and {src_i}, {tgt_i} timesteps, value range: [{latent.min()}, {latent.max()}]")
-            latent_samples.append(latent)
+                diff_state = state
+                latent[:, i*fixed_len:(i*fixed_len) + min(shape[1]-i*fixed_len, fixed_len), :] = new_latent
+            logger.info(f"Latent at {i} forward and {src_i}, {tgt_i} timesteps, value range: [{latent.min()}, {latent.max()}]")
+            latent_samples.append(latent.clone())
 
-        ret = latent if not return_all_timesteps else t.stack(latent_samples, dim = 1)
+        ret = latent_samples[-1] if not return_all_timesteps else t.stack(latent_samples, dim = 1)
 
         return ret 
