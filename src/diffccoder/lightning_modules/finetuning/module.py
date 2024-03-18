@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, TypeAlias
 
 from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.utilities.rank_zero import rank_zero_only
@@ -91,7 +91,7 @@ class DiffusionFineTuningModule(TrainingBase):
     
         y = y.long()
         ctx_len = self.rwkv_config.context_length
-        y1, y2, y2_mask = y[:, :ctx_len], y[:, ctx_len:], ~(y[:, ctx_len:] == 1).all(-1)
+        y1, y2, y2_mask = y[:, :ctx_len], y[:, ctx_len:], ~(y[:, ctx_len:] == 0).all(-1)
         y1_mask = t.ones_like(y2_mask)
         
         state = BlockStateList.create(self.rwkv_config.num_hidden_layers,
@@ -102,32 +102,33 @@ class DiffusionFineTuningModule(TrainingBase):
         x = x.int()
         
         model: GaussianDiffusion = self.model if not use_ema else self.ema
-        noise: t.Tensor = None
-        timesteps: t.Tensor = None
         total_diff_losses: DiffusionLosses = None
         
-        for _y, mask, offset_noise_strength in [(y1, y1_mask, None), (y2, y2_mask, 0.0)]:
+        for _y, mask in [(y1, y1_mask), (y2, y2_mask)]:
             if not t.any(mask): continue
-            
-            diff_out: tuple[DiffusionLosses, Optional[BlockStateList], t.Tensor, t.Tensor] = model(x[mask],
-                                                                                                   _y[mask],
-                                                                                                   None,#noise[mask] if noise is not None else None,
-                                                                                                   None, #timesteps[mask] if timesteps is not None else None,
-                                                                                                   state.subset(mask),
-                                                                                                   offset_noise_strength=offset_noise_strength)
-            diff_losses, state, timesteps, noise = diff_out
+            out_type: TypeAlias = tuple[DiffusionLosses, Optional[BlockStateList], t.Tensor, t.Tensor] 
+            diff_out: out_type = model(x[mask],
+                                       _y[mask],
+                                       None,
+                                       None,
+                                       state.subset(mask))
+            diff_losses, state, *_ = diff_out
         
-            if total_diff_losses is None:
-                total_diff_losses = diff_losses
-            else:
-                total_diff_losses.loss[mask] += diff_losses.loss
-                total_diff_losses.mse_loss[mask] += diff_losses.mse_loss
-                total_diff_losses.decoder_nll += diff_losses.decoder_nll
-                total_diff_losses.t0_loss[mask] += diff_losses.t0_loss
-                total_diff_losses.tT_loss[mask] += diff_losses.tT_loss
-                total_diff_losses.mse_pre[mask] += diff_losses.mse_pre
+            total_diff_losses = self.get_total_loses(total_diff_losses, mask, diff_losses)
         
-        return diff_losses, y
+        return total_diff_losses, y
+
+    def get_total_loses(self, total_diff_losses: DiffusionLosses, mask: t.Tensor, diff_losses: DiffusionLosses):
+        if total_diff_losses is None:
+            total_diff_losses = diff_losses
+        else:
+            total_diff_losses.loss[mask] += diff_losses.loss
+            total_diff_losses.mse_loss[mask] += diff_losses.mse_loss
+            total_diff_losses.decoder_nll += diff_losses.decoder_nll
+            total_diff_losses.t0_loss[mask] += diff_losses.t0_loss
+            total_diff_losses.tT_loss[mask] += diff_losses.tT_loss
+            total_diff_losses.mse_pre[mask] += diff_losses.mse_pre
+        return total_diff_losses
     
     @rank_zero_only
     def init_ema(self):

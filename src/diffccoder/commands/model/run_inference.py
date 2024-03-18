@@ -124,22 +124,28 @@ class InferCommand(Command):
              
         ckpt_dir: Path = exp_config.work_dir / 'artifacts'
         last_ckpt_fname = get_last_ckpt_name(ckpt_dir)    
+        diff_cfg.clip_denoised = False
         
         ckpt_path: Path = ckpt_dir / last_ckpt_fname
         ema_path = ckpt_dir / 'ema.pt' if ckpt_path.is_file() else None
         best_path = ckpt_dir / 'best_on_val_loss.ckpt' if ckpt_path.is_file() else None
         kwargs = {'ckpt_path':best_path} if ckpt_path.is_file() else {}
+        length = int(self.option('target-len'))
         if not exp_config.from_pretrained:
             net_module = DiffusionInferModule(rwkv_cfg,
                                               diff_cfg,
                                               tokenizer=tokenizer,
                                               ema_local_path=ema_path,
-                                              from_pretrained=best_path)
+                                              from_pretrained=best_path,
+                                              target_length=length,
+                                              out=exp_config.out_dir)
         else:
             net_module = DiffusionInferModule(rwkv_cfg,
                                               diff_cfg,
                                               from_pretrained=exp_config.from_pretrained,
-                                              tokenizer=tokenizer)           
+                                              tokenizer=tokenizer,
+                                              target_length=length,
+                                              out=exp_config.out_dir)           
 
         logger.info(f'Running on: {model_runner.accelerator}; Skipping initialization?: {bool(kwargs)}')
                     
